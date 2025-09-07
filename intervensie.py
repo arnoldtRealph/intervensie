@@ -55,7 +55,7 @@ if not os.path.exists(csv_file):
     df.to_csv(csv_file, index=False)
 
 # ---------------- UI ---------------- #
-st.title("Saul Damon High School")
+st.title("HOËRSKOOL SAUL DAMON")
 st.subheader("📘 Intervensie Klasse")
 
 with st.form("data_form", clear_on_submit=True):
