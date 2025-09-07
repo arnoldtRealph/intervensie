@@ -41,7 +41,7 @@ if not os.path.exists(CSV_FILE):
 def upload_file_to_github(local_path, repo, path_in_repo, token, branch="main", commit_message="Update intervensie CSV"):
     """
     Upload or update a file in GitHub repo via contents API.
-    repo: "username/repo"
+    repo: "https://github.com/arnoldtRealph/intervensie"
     path_in_repo: "folder/filename.csv"
     token: personal access token (store in st.secrets)
     """
