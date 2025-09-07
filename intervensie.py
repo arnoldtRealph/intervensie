@@ -38,7 +38,7 @@ def upload_file_to_github(file_path, repo, path_in_repo, token, branch="master")
         st.success("📤 Data successfully synced to GitHub!")
 
 # ---------------- Config ---------------- #
-st.set_page_config(page_title="HOËRSKOOL SAUL DAMON - Intervensie", layout="wide")
+st.set_page_config(page_title="HOËRSKOOL SAUL DAMON: INTERVENSIE KLASSE", layout="wide")
 
 csv_file = "intervensie_database.csv"
 foto_dir = "fotos"
