@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from docx import Document
 from docx.shared import Inches
 import base64
-import requests
+from github import Github
 from io import BytesIO
 
 # ---------------- Config ---------------- #
@@ -18,9 +18,9 @@ st.set_page_config(
 # Constants
 CSV_FILE = "intervensie_database.csv"
 LOG_FILE = "app_log.csv"
+ERROR_LOG_FILE = "error_log.txt"
 FOTO_DIR = "fotos"
 PRES_DIR = "presensies"
-GITHUB_API_URL = "https://api.github.com/repos/{repo}/contents/{path}"
 GRADE_OPTIONS = ["8", "9", "10", "11", "12"]
 
 # Initialize directories and CSV
@@ -55,78 +55,58 @@ def log_action(action, details="", status="INFO"):
         return False
 
 # ---------------- GitHub Upload Function ---------------- #
-@st.cache_data(show_spinner=False, ttl=300)  # Cache for 5 minutes
-def upload_file_to_github(file_path, repo, path_in_repo, token, branch="master"):
-    """Upload or update a file in a GitHub repository."""
+def upload_file_to_github(file_path, repo_name, path_in_repo, token):
+    """Upload or update a file in a GitHub repository using PyGithub."""
     try:
-        log_action("GitHub Upload Attempt", f"File: {path_in_repo}, Repo: {repo}", "INFO")
+        log_action("GitHub Upload Attempt", f"File: {path_in_repo}, Repo: {repo_name}", "INFO")
         
         # Validate token
         if not token or token.strip() == "":
             log_action("GitHub Upload Failed", "Empty or missing token", "ERROR")
             st.error("⚠️ GitHub token is leeg of ontbreek! Gaan na GitHub → Settings → Developer settings → Personal access tokens en genereer 'n nuwe token met 'repo' scope.")
             return False
-        
-        url = GITHUB_API_URL.format(repo=repo, path=path_in_repo)
-        headers = {
-            "Authorization": f"token {token}", 
-            "Accept": "application/vnd.github.v3+json",
-            "Content-Type": "application/json"
-        }
 
-        # Test token validity
-        test_url = "https://api.github.com/user"
-        test_response = requests.get(test_url, headers=headers, timeout=10)
-        if test_response.status_code != 200:
-            error_msg = test_response.json().get('message', 'Unknown authentication error')
-            if test_response.status_code == 401:
-                error_msg += " - Kontroleer of die token korrek is en 'repo' scope het. Gaan na GitHub → Settings → Developer settings → Personal access tokens."
-            log_action("GitHub Upload Failed", f"Token validation failed: {error_msg}", "ERROR")
-            st.error(f"⚠️ GitHub Token is ongeldig: {error_msg}")
-            return False
+        # Initialize GitHub client
+        g = Github(token)
+        repo = g.get_repo(repo_name)
 
         # Read file content
         if not os.path.exists(file_path):
             log_action("GitHub Upload Failed", f"Local file not found: {file_path}", "ERROR")
             st.error(f"⚠️ Lokale lêer nie gevind nie: {file_path}")
             return False
-            
-        with open(file_path, "rb") as f:
-            content = base64.b64encode(f.read()).decode("utf-8")
 
-        # Check if file exists on GitHub
-        r = requests.get(url, headers=headers, timeout=10)
-        data = {
-            "message": f"Update {path_in_repo} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-            "content": content,
-            "branch": branch
-        }
-        if r.status_code == 200:
-            data["sha"] = r.json()["sha"]
-            log_action("GitHub File Exists", f"Found existing file: {path_in_repo}", "INFO")
+        with open(file_path, "rb") as file:
+            content = file.read()
 
-        # Upload file
-        r = requests.put(url, headers=headers, json=data, timeout=10)
-        if r.status_code not in [200, 201]:
-            error_detail = r.json().get('message', f'HTTP {r.status_code}') if r.content else f'HTTP {r.status_code}'
-            log_action("GitHub Upload Failed", f"Upload error: {error_detail}", "ERROR")
-            st.error(f"⚠️ GitHub upload misluk: {error_detail}")
-            return False
-        
-        log_action("GitHub Upload Success", f"Successfully uploaded: {path_in_repo}", "SUCCESS")
+        # Attempt to update or create file
+        repo_path = path_in_repo
+        try:
+            contents = repo.get_contents(repo_path, ref="master")
+            repo.update_file(
+                path=repo_path,
+                message=f"Updated {repo_path} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                content=content,
+                sha=contents.sha,
+                branch="master"
+            )
+            log_action("GitHub Upload Success", f"Updated existing file: {repo_path}", "SUCCESS")
+        except:
+            repo.create_file(
+                path=repo_path,
+                message=f"Created {repo_path} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                content=content,
+                branch="master"
+            )
+            log_action("GitHub Upload Success", f"Created new file: {repo_path}", "SUCCESS")
         return True
-        
-    except requests.exceptions.Timeout:
-        log_action("GitHub Upload Failed", "Request timeout", "ERROR")
-        st.error("⚠️ GitHub verbinding het uitgetime-out. Probeer weer.")
-        return False
-    except requests.exceptions.ConnectionError:
-        log_action("GitHub Upload Failed", "Connection error", "ERROR")
-        st.error("⚠️ Geen verbinding met GitHub nie. Kontroleer jou internetverbinding.")
-        return False
+
     except Exception as e:
-        log_action("GitHub Upload Failed", f"Unexpected error: {str(e)}", "ERROR")
-        st.error(f"⚠️ Onverwagte fout: {str(e)}")
+        error_msg = str(e)
+        log_action("GitHub Upload Failed", f"Error: {error_msg}", "ERROR")
+        with open(ERROR_LOG_FILE, "a") as f:
+            f.write(f"GitHub push failed: {error_msg} at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        st.error(f"⚠️ GitHub upload misluk: {error_msg}")
         return False
 
 # ---------------- UI ---------------- #
@@ -150,7 +130,6 @@ if os.path.exists(LOG_FILE):
             height=400
         )
         
- 等
         # Log statistics
         status_counts = log_df["Status"].value_counts()
         col1, col2, col3 = st.sidebar.columns(3)
@@ -251,7 +230,7 @@ with st.form("data_form", clear_on_submit=True):
                 if not token or not repo:
                     log_action("GitHub Config Missing", f"Token: {bool(token)}, Repo: {bool(repo)}", "WARNING")
                     st.warning("⚠️ GitHub konfigurasie ontbreek in secrets. Data is lokaal gestoor. Gaan na .streamlit/secrets.toml en voeg GITHUB_TOKEN en GITHUB_REPO by.")
-                elif upload_file_to_github(CSV_FILE, repo, "intervensie_database.csv", token, branch="master"):
+                elif upload_file_to_github(CSV_FILE, repo, "intervensie_database.csv", token):
                     log_action("Sync Complete", "All operations successful", "SUCCESS")
                     st.success("✅ Data gestoor en gesinkroniseer met GitHub!")
                 else:
