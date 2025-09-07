@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import pandas as pd
 import os
@@ -151,6 +150,7 @@ if os.path.exists(LOG_FILE):
             height=400
         )
         
+ 等
         # Log statistics
         status_counts = log_df["Status"].value_counts()
         col1, col2, col3 = st.sidebar.columns(3)
@@ -364,4 +364,3 @@ else:
         file_name=f"intervensie_report_{datetime.now().strftime('%Y%m%d')}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
-```
