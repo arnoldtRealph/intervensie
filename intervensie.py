@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 import pandas as pd
 import os
@@ -45,14 +46,18 @@ def log_action(action, details="", status="INFO"):
         "Details": details,
         "Status": status
     }
-    df_log = pd.read_csv(LOG_FILE)
-    df_log = pd.concat([df_log, pd.DataFrame([log_entry])], ignore_index=True)
-    df_log.to_csv(LOG_FILE, index=False)
-    return True
+    try:
+        df_log = pd.read_csv(LOG_FILE)
+        df_log = pd.concat([df_log, pd.DataFrame([log_entry])], ignore_index=True)
+        df_log.to_csv(LOG_FILE, index=False)
+        return True
+    except Exception as e:
+        st.error(f"⚠️ Fout met log stoor: {str(e)}")
+        return False
 
 # ---------------- GitHub Upload Function ---------------- #
 @st.cache_data(show_spinner=False, ttl=300)  # Cache for 5 minutes
-def upload_file_to_github(file_path, repo, path_in_repo, token, branch="main"):
+def upload_file_to_github(file_path, repo, path_in_repo, token, branch="master"):
     """Upload or update a file in a GitHub repository."""
     try:
         log_action("GitHub Upload Attempt", f"File: {path_in_repo}, Repo: {repo}", "INFO")
@@ -60,7 +65,7 @@ def upload_file_to_github(file_path, repo, path_in_repo, token, branch="main"):
         # Validate token
         if not token or token.strip() == "":
             log_action("GitHub Upload Failed", "Empty or missing token", "ERROR")
-            st.error("⚠️ GitHub token is leeg of ontbreek!")
+            st.error("⚠️ GitHub token is leeg of ontbreek! Gaan na GitHub → Settings → Developer settings → Personal access tokens en genereer 'n nuwe token met 'repo' scope.")
             return False
         
         url = GITHUB_API_URL.format(repo=repo, path=path_in_repo)
@@ -70,11 +75,13 @@ def upload_file_to_github(file_path, repo, path_in_repo, token, branch="main"):
             "Content-Type": "application/json"
         }
 
-        # Test token validity first
+        # Test token validity
         test_url = "https://api.github.com/user"
         test_response = requests.get(test_url, headers=headers, timeout=10)
         if test_response.status_code != 200:
-            error_msg = test_response.json().get('message', 'Unknown authentication error') if test_response.status_code == 401 else f"HTTP {test_response.status_code}"
+            error_msg = test_response.json().get('message', 'Unknown authentication error')
+            if test_response.status_code == 401:
+                error_msg += " - Kontroleer of die token korrek is en 'repo' scope het. Gaan na GitHub → Settings → Developer settings → Personal access tokens."
             log_action("GitHub Upload Failed", f"Token validation failed: {error_msg}", "ERROR")
             st.error(f"⚠️ GitHub Token is ongeldig: {error_msg}")
             return False
@@ -108,7 +115,6 @@ def upload_file_to_github(file_path, repo, path_in_repo, token, branch="main"):
             return False
         
         log_action("GitHub Upload Success", f"Successfully uploaded: {path_in_repo}", "SUCCESS")
-        st.success("✅ Data suksesvol gesinkroniseer met GitHub!")
         return True
         
     except requests.exceptions.Timeout:
@@ -128,7 +134,7 @@ def upload_file_to_github(file_path, repo, path_in_repo, token, branch="main"):
 st.title("HOËRSKOOL SAUL DAMON")
 st.subheader("📘 Intervensie Klasse")
 
-# Log display on main page
+# Log display in sidebar
 st.sidebar.title("📋 Logs")
 if os.path.exists(LOG_FILE):
     log_df = pd.read_csv(LOG_FILE)
@@ -138,10 +144,10 @@ if os.path.exists(LOG_FILE):
         st.sidebar.dataframe(
             recent_logs,
             column_config={
-                "Timestamp": st.column_config.TimeColumn(format="YYYY-MM-DD HH:mm:ss"),
-                "Status": st.column_config.SelectboxColumn(options=["INFO", "SUCCESS", "ERROR"])
+                "Timestamp": st.column_config.DatimeColumn(format="YYYY-MM-DD HH:mm:ss"),
+                "Status": st.column_config.SelectboxColumn(options=["INFO", "SUCCESS", "ERROR", "WARNING"])
             },
-            use_container_width=True,
+            width="stretch",
             height=400
         )
         
@@ -244,21 +250,20 @@ with st.form("data_form", clear_on_submit=True):
                 
                 if not token or not repo:
                     log_action("GitHub Config Missing", f"Token: {bool(token)}, Repo: {bool(repo)}", "WARNING")
-                    st.warning("⚠️ GitHub konfigurasie ontbreek in secrets. Data is lokaal gestoor.")
-                elif upload_file_to_github(CSV_FILE, repo, "intervensie_database.csv", token):
+                    st.warning("⚠️ GitHub konfigurasie ontbreek in secrets. Data is lokaal gestoor. Gaan na .streamlit/secrets.toml en voeg GITHUB_TOKEN en GITHUB_REPO by.")
+                elif upload_file_to_github(CSV_FILE, repo, "intervensie_database.csv", token, branch="master"):
                     log_action("Sync Complete", "All operations successful", "SUCCESS")
+                    st.success("✅ Data gestoor en gesinkroniseer met GitHub!")
                 else:
                     log_action("Sync Incomplete", "GitHub sync failed but data saved locally", "WARNING")
                     st.warning("⚠️ Data lokaal gestoor, maar GitHub sinkronisasie misluk.")
                     
             except KeyError as e:
                 log_action("GitHub Secrets Error", f"Missing secret: {str(e)}", "ERROR")
-                st.error("⚠️ GitHub konfigurasie ontbreek in secrets!")
+                st.error("⚠️ GitHub konfigurasie ontbreek in secrets! Gaan na .streamlit/secrets.toml en voeg GITHUB_TOKEN en GITHUB_REPO by.")
             except Exception as e:
                 log_action("GitHub Unexpected Error", f"Sync error: {str(e)}", "ERROR")
                 st.error(f"⚠️ Onverwagte GitHub fout: {str(e)}")
-
-            st.success("✅ Data gestoor!")
 
 # ---------------- Reporting ---------------- #
 st.subheader("📊 Verslag")
@@ -304,7 +309,7 @@ else:
             "Aanwesigheid %": st.column_config.NumberColumn(format="%.2f%%"),
             "Graad": st.column_config.SelectboxColumn(options=GRADE_OPTIONS)
         },
-        use_container_width=True
+        width="stretch"
     )
 
     # Generate Word report
@@ -359,3 +364,4 @@ else:
         file_name=f"intervensie_report_{datetime.now().strftime('%Y%m%d')}.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
+```
