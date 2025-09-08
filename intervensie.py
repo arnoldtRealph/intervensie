@@ -33,7 +33,6 @@ if not os.path.exists(CSV_FILE):
         "Totaal Opgedaag", "Opvoeder", "Foto", "Presensielys"
     ]).to_csv(CSV_FILE, index=False)
 
-# Initialize log file
 if not os.path.exists(LOG_FILE):
     pd.DataFrame(columns=["Timestamp", "Action", "Details", "Status"]).to_csv(LOG_FILE, index=False)
 
@@ -52,6 +51,8 @@ def log_action(action, details="", status="INFO"):
         return True
     except Exception as e:
         st.error(f"⚠️ Fout met log stoor: {str(e)}")
+        with open(ERROR_LOG_FILE, "a") as f:
+            f.write(f"Log save failed: {str(e)} at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         return False
 
 # ---------------- GitHub Upload Function ---------------- #
@@ -59,18 +60,14 @@ def upload_file_to_github(file_path, repo_name, path_in_repo, token):
     """Upload or update a file in a GitHub repository using PyGithub."""
     try:
         log_action("GitHub Upload Attempt", f"File: {path_in_repo}, Repo: {repo_name}", "INFO")
-        
-        # Validate token
         if not token or token.strip() == "":
             log_action("GitHub Upload Failed", "Empty or missing token", "ERROR")
-            st.error("⚠️ GitHub token is leeg of ontbreek! Gaan na GitHub → Settings → Developer settings → Personal access tokens en genereer 'n nuwe token met 'repo' scope.")
+            st.error("⚠️ GitHub token is leeg of ontbreek!")
             return False
 
-        # Initialize GitHub client
         g = Github(token)
         repo = g.get_repo(repo_name)
 
-        # Read file content
         if not os.path.exists(file_path):
             log_action("GitHub Upload Failed", f"Local file not found: {file_path}", "ERROR")
             st.error(f"⚠️ Lokale lêer nie gevind nie: {file_path}")
@@ -79,16 +76,15 @@ def upload_file_to_github(file_path, repo_name, path_in_repo, token):
         with open(file_path, "rb") as file:
             content = file.read()
 
-        # Attempt to update or create file
         repo_path = path_in_repo
         try:
-            contents = repo.get_contents(repo_path, ref="master")
+            contents = repo.get_contents(repo_path, ref="main")
             repo.update_file(
                 path=repo_path,
                 message=f"Updated {repo_path} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
                 content=content,
                 sha=contents.sha,
-                branch="master"
+                branch="main"
             )
             log_action("GitHub Upload Success", f"Updated existing file: {repo_path}", "SUCCESS")
         except:
@@ -96,11 +92,10 @@ def upload_file_to_github(file_path, repo_name, path_in_repo, token):
                 path=repo_path,
                 message=f"Created {repo_path} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
                 content=content,
-                branch="master"
+                branch="main"
             )
             log_action("GitHub Upload Success", f"Created new file: {repo_path}", "SUCCESS")
         return True
-
     except Exception as e:
         error_msg = str(e)
         log_action("GitHub Upload Failed", f"Error: {error_msg}", "ERROR")
@@ -113,26 +108,24 @@ def upload_file_to_github(file_path, repo_name, path_in_repo, token):
 st.title("HOËRSKOOL SAUL DAMON")
 st.subheader("📘 Intervensie Klasse")
 
-# Log display in sidebar
-st.sidebar.title("📋 Logs")
+# Log Display on Homepage
+st.subheader("📋 Logs")
 if os.path.exists(LOG_FILE):
     log_df = pd.read_csv(LOG_FILE)
     if not log_df.empty:
-        # Show recent logs (last 20 entries)
         recent_logs = log_df.tail(20).sort_values("Timestamp", ascending=False)
-        st.sidebar.dataframe(
+        st.dataframe(
             recent_logs,
             column_config={
                 "Timestamp": st.column_config.DatimeColumn(format="YYYY-MM-DD HH:mm:ss"),
                 "Status": st.column_config.SelectboxColumn(options=["INFO", "SUCCESS", "ERROR", "WARNING"])
             },
-            width="stretch",
+            use_container_width=True,
             height=400
         )
-        
         # Log statistics
         status_counts = log_df["Status"].value_counts()
-        col1, col2, col3 = st.sidebar.columns(3)
+        col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Totaal Logs", len(log_df))
         with col2:
@@ -140,9 +133,9 @@ if os.path.exists(LOG_FILE):
         with col3:
             st.metric("Foute", status_counts.get("ERROR", 0))
     else:
-        st.sidebar.info("Geen log items nog nie.")
+        st.info("ℹ️ Nog geen log items nie.")
 else:
-    st.sidebar.info("Log lêer nie gevind nie.")
+    st.info("ℹ️ Log lêer nie gevind nie.")
 
 # Form
 with st.form("data_form", clear_on_submit=True):
@@ -167,7 +160,6 @@ with st.form("data_form", clear_on_submit=True):
 
     if submitted:
         log_action("Form Submission", f"Submitted by: {opvoeder}", "INFO")
-        
         if not all([datum, graad, vak, tema, opvoeder, foto, presensie_l, totaal_genooi]):
             log_action("Form Validation Failed", "Missing required fields", "WARNING")
             st.error("⚠️ Alle velde is verpligtend!")
@@ -175,9 +167,6 @@ with st.form("data_form", clear_on_submit=True):
             log_action("Form Validation Failed", f"Attendance ({totaal_opgedaag}) > Total ({totaal_genooi})", "WARNING")
             st.error("⚠️ Totaal Opgedaag kan nie meer as Totaal Genooi wees nie!")
         else:
-            log_action("File Processing", f"Saving files for {vak} - {tema}", "INFO")
-            
-            # Save files with unique names to prevent overwrites
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             foto_ext = os.path.splitext(foto.name)[1]
             pres_ext = os.path.splitext(presensie_l.name)[1]
@@ -200,7 +189,6 @@ with st.form("data_form", clear_on_submit=True):
                 log_action("File Save Failed", f"Attendance sheet save error: {str(e)}", "ERROR")
                 st.error(f"⚠️ Fout met presensielys stoor: {str(e)}")
 
-            # Save to CSV
             try:
                 new_entry = {
                     "Datum": datum.strftime("%Y-%m-%d"),
@@ -220,26 +208,23 @@ with st.form("data_form", clear_on_submit=True):
             except Exception as e:
                 log_action("Database Update Failed", f"CSV error: {str(e)}", "ERROR")
                 st.error(f"⚠️ Fout met databasis stoor: {str(e)}")
-                st.stop()  # Stop execution if database save fails
+                st.stop()
 
-            # Upload to GitHub
             try:
                 token = st.secrets.get("GITHUB_TOKEN")
                 repo = st.secrets.get("GITHUB_REPO")
-                
                 if not token or not repo:
                     log_action("GitHub Config Missing", f"Token: {bool(token)}, Repo: {bool(repo)}", "WARNING")
-                    st.warning("⚠️ GitHub konfigurasie ontbreek in secrets. Data is lokaal gestoor. Gaan na .streamlit/secrets.toml en voeg GITHUB_TOKEN en GITHUB_REPO by.")
+                    st.warning("⚠️ GitHub konfigurasie ontbreek in secrets.")
                 elif upload_file_to_github(CSV_FILE, repo, "intervensie_database.csv", token):
                     log_action("Sync Complete", "All operations successful", "SUCCESS")
                     st.success("✅ Data gestoor en gesinkroniseer met GitHub!")
                 else:
                     log_action("Sync Incomplete", "GitHub sync failed but data saved locally", "WARNING")
                     st.warning("⚠️ Data lokaal gestoor, maar GitHub sinkronisasie misluk.")
-                    
             except KeyError as e:
                 log_action("GitHub Secrets Error", f"Missing secret: {str(e)}", "ERROR")
-                st.error("⚠️ GitHub konfigurasie ontbreek in secrets! Gaan na .streamlit/secrets.toml en voeg GITHUB_TOKEN en GITHUB_REPO by.")
+                st.error("⚠️ GitHub konfigurasie ontbreek in secrets!")
             except Exception as e:
                 log_action("GitHub Unexpected Error", f"Sync error: {str(e)}", "ERROR")
                 st.error(f"⚠️ Onverwagte GitHub fout: {str(e)}")
@@ -247,7 +232,7 @@ with st.form("data_form", clear_on_submit=True):
 # ---------------- Reporting ---------------- #
 st.subheader("📊 Verslag")
 
-@st.cache_data(ttl=600)  # Cache for 10 minutes
+@st.cache_data(ttl=600)
 def load_and_filter_data(filter_type):
     if not os.path.exists(CSV_FILE):
         return pd.DataFrame()
@@ -271,7 +256,6 @@ def load_and_filter_data(filter_type):
         df = df[df["Datum"] >= start]
     return df
 
-# Filters
 filter_type = st.selectbox("🔎 Kies filter", ["Alles", "Weekliks", "Maandeliks", "Kwartaalliks"])
 df = load_and_filter_data(filter_type)
 
@@ -279,8 +263,6 @@ if df.empty:
     st.info("ℹ️ Nog geen data beskikbaar nie.")
 else:
     log_action("Report Generated", f"Filter: {filter_type}, Records: {len(df)}", "INFO")
-    
-    # Display data with sorting and styling
     st.dataframe(
         df.sort_values("Datum", ascending=False),
         column_config={
@@ -288,10 +270,9 @@ else:
             "Aanwesigheid %": st.column_config.NumberColumn(format="%.2f%%"),
             "Graad": st.column_config.SelectboxColumn(options=GRADE_OPTIONS)
         },
-        width="stretch"
+        use_container_width=True
     )
 
-    # Generate Word report
     def generate_word_report(df):
         doc = Document()
         doc.add_heading("Saul Damon High School - Intervensie Verslag", level=1)
@@ -329,17 +310,22 @@ else:
             
             doc.add_paragraph("-" * 30)
         
-        # Save to BytesIO for download
         buffer = BytesIO()
         doc.save(buffer)
         buffer.seek(0)
-        return buffer
+        return buffer.getvalue()  # Return bytes directly for download
 
     # Download button
-    buffer = generate_word_report(df)
-    st.download_button(
-        "⬇️ Laai Verslag af (Word)",
-        buffer,
-        file_name=f"intervensie_report_{datetime.now().strftime('%Y%m%d')}.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    )
+    if not df.empty:
+        try:
+            doc_bytes = generate_word_report(df)
+            st.download_button(
+                label="⬇️ Laai Verslag af (Word)",
+                data=doc_bytes,
+                file_name=f"intervensie_report_{datetime.now().strftime('%Y%m%d')}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                key="download_word_report"
+            )
+        except Exception as e:
+            log_action("Word Report Download Failed", f"Error: {str(e)}", "ERROR")
+            st.error(f"⚠️ Fout met verslag aflaai: {str(e)}")
