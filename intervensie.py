@@ -129,7 +129,7 @@ st.subheader("📘 Intervensie Klasse")
 
 # Sidebar filters
 st.sidebar.header("Filters")
-filter_type = st.sidebar.selectbox("🔎 Kies tydsfilter", ["Alles", "Weekliks", "Maandeliks", "Kwartaalliks"]) 
+filter_type = st.sidebar.selectbox("🔎 Kies tydsfilter", ["Alles", "Weekliks", "Maandeliks", "Kwartaalliks", "Jaarliks"]) 
 
 # Load raw data for filter choices
 @st.cache_data(ttl=300)
@@ -273,6 +273,9 @@ def load_and_filter_data(filter_type, opvoeder=None, vak=None, graad=None):
     elif filter_type == "Kwartaalliks":
         start = today - timedelta(days=90)
         df = df[df["Datum"] >= start]
+    elif filter_type == "Jaarliks":
+        start = today - timedelta(days=365)
+        df = df[df["Datum"] >= start]
 
     # Apply additional filters
     if opvoeder and opvoeder != 'Alles':
@@ -330,6 +333,44 @@ else:
                 st.session_state.page += 1
     with col2:
         st.write(f"Bladsy {st.session_state.page + 1} van {max(total_pages,1)}")
+
+# ---------------- Deletion ---------------- #
+st.subheader("🗑️ Verwyder Inskrywing")
+if not df.empty:
+    entries = [f"ID {idx}: {row['Datum']} - {row['Vak']} - {row['Opvoeder']}" for idx, row in df.iterrows()]
+    selected_entry = st.selectbox("Kies inskrywing om te verwyder", ["Geen"] + entries)
+    if st.button("Bevestig Verwydering"):
+        if selected_entry != "Geen":
+            try:
+                idx = int(selected_entry.split(":")[0].split(" ")[1])
+                full_df = pd.read_csv(CSV_FILE)
+                row_to_delete = full_df.loc[idx]
+                full_df = full_df.drop(idx).reset_index(drop=True)
+                full_df.to_csv(CSV_FILE, index=False)
+
+                # Delete associated files
+                if pd.notna(row_to_delete['Foto']) and os.path.exists(row_to_delete['Foto']):
+                    os.remove(row_to_delete['Foto'])
+                    log_action("File Delete Success", f"Photo deleted: {row_to_delete['Foto']}", "SUCCESS")
+                if pd.notna(row_to_delete['Presensielys']) and os.path.exists(row_to_delete['Presensielys']):
+                    os.remove(row_to_delete['Presensielys'])
+                    log_action("File Delete Success", f"Presensielys deleted: {row_to_delete['Presensielys']}", "SUCCESS")
+
+                # Sync to GitHub
+                token = st.secrets.get("GITHUB_TOKEN")
+                repo = st.secrets.get("GITHUB_REPO")
+                if token and repo:
+                    upload_file_to_github(CSV_FILE, repo, "intervensie_database.csv", token)
+
+                st.success("✅ Inskrywing suksesvol verwyder!")
+                log_action("Deletion Success", f"Deleted ID {idx}", "SUCCESS")
+                load_and_filter_data.clear()
+                load_raw.clear()
+            except Exception as e:
+                st.error(f"⚠️ Fout met verwydering: {str(e)}")
+                log_action("Deletion Failed", f"Error: {str(e)}", "ERROR")
+else:
+    st.info("ℹ️ Geen inskrywings beskikbaar om te verwyder nie.")
 
     # Generate Word report
     def generate_word_report(df_to_export):
