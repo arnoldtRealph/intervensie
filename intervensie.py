@@ -11,7 +11,7 @@ from io import BytesIO
 st.set_page_config(
     page_title="HOËRSKOOL SAUL DAMON: INTERVENSIE KLASSE",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # Constants
@@ -34,6 +34,7 @@ if not os.path.exists(CSV_FILE):
 
 if not os.path.exists(LOG_FILE):
     pd.DataFrame(columns=["Timestamp", "Action", "Details", "Status"]).to_csv(LOG_FILE, index=False)
+
 
 def log_action(action, details="", status="INFO"):
     """Log actions to CSV file."""
@@ -86,7 +87,7 @@ def upload_file_to_github(file_path, repo_name, path_in_repo, token):
                 branch="master"
             )
             log_action("GitHub Upload Success", f"Updated existing file: {repo_path}", "SUCCESS")
-        except:
+        except Exception:
             repo.create_file(
                 path=repo_path,
                 message=f"Created {repo_path} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
@@ -103,27 +104,77 @@ def upload_file_to_github(file_path, repo_name, path_in_repo, token):
         st.error(f"⚠️ GitHub upload misluk: {error_msg}")
         return False
 
+# ---------------- Helper: safe read attendance file ---------------- #
+
+def read_presensie_to_table(path, max_rows=20):
+    """Try to convert a CSV/XLSX presensielys into a pandas DataFrame for insertion into Word."""
+    try:
+        ext = path.split('.')[-1].lower()
+        if ext == 'csv':
+            df_p = pd.read_csv(path)
+        elif ext in ['xls', 'xlsx']:
+            df_p = pd.read_excel(path)
+        else:
+            return None
+        if df_p.shape[0] > max_rows:
+            return df_p.iloc[:max_rows]
+        return df_p
+    except Exception as e:
+        log_action("Presensie Read Failed", f"{path} - {str(e)}", "WARNING")
+        return None
+
 # ---------------- UI ---------------- #
 st.title("HOËRSKOOL SAUL DAMON")
 st.subheader("📘 Intervensie Klasse")
 
-# Form
+# Sidebar filters
+st.sidebar.header("Filters")
+filter_type = st.sidebar.selectbox("🔎 Kies tydsfilter", ["Alles", "Weekliks", "Maandeliks", "Kwartaalliks"]) 
+
+# Load raw data for filter choices
+@st.cache_data(ttl=300)
+def load_raw():
+    if not os.path.exists(CSV_FILE):
+        return pd.DataFrame()
+    df = pd.read_csv(CSV_FILE)
+    if df.empty:
+        return df
+    df['Datum'] = pd.to_datetime(df['Datum'], errors='coerce')
+    return df
+
+raw_df = load_raw()
+
+# Options for filter selectors
+opvoeder_options = ['Alles'] + sorted(raw_df['Opvoeder'].dropna().unique().tolist()) if not raw_df.empty else ['Alles']
+vak_options = ['Alles'] + sorted(raw_df['Vak'].dropna().unique().tolist()) if not raw_df.empty else ['Alles']
+graad_options = ['Alles'] + GRADE_OPTIONS
+
+selected_opvoeder = st.sidebar.selectbox("Opvoeder", opvoeder_options)
+selected_vak = st.sidebar.selectbox("Vak", vak_options)
+selected_graad = st.sidebar.selectbox("Graad", graad_options)
+
+# Reset page when filters change
+if 'page' not in st.session_state:
+    st.session_state.page = 0
+
+# Form for new entries
 with st.form("data_form", clear_on_submit=True):
     col1, col2 = st.columns(2)
     with col1:
         datum = st.date_input("📅 Datum", value=datetime.today(), format="YYYY/MM/DD")
-        graad = st.selectbox("🎓 Graad", GRADE_OPTIONS)
-        vak = st.text_input("📚 Vak")
-        tema = st.text_input("🎯 Tema")
+        graad = st.selectbox("🎓 Graad", GRADE_OPTIONS, key='form_graad')
+        vak = st.text_input("📚 Vak", key='form_vak')
+        tema = st.text_input("🎯 Tema", key='form_tema')
     with col2:
-        totaal_genooi = st.number_input("👥 Totaal Genooi", min_value=1, step=1, format="%d")
-        totaal_opgedaag = st.number_input("✅ Totaal Opgedaag", min_value=0, step=1, format="%d")
-        opvoeder = st.text_input("👨‍🏫 Opvoeder")
+        totaal_genooi = st.number_input("👥 Totaal Genooi", min_value=1, step=1, format="%d", key='form_totaal_genooi')
+        totaal_opgedaag = st.number_input("✅ Totaal Opgedaag", min_value=0, step=1, format="%d", key='form_totaal_opgedaag')
+        opvoeder = st.text_input("👨‍🏫 Opvoeder", key='form_opvoeder')
     
-    foto = st.file_uploader("📸 Laai Foto op", type=["jpg", "jpeg", "png"])
+    foto = st.file_uploader("📸 Laai Foto op", type=["jpg", "jpeg", "png"], key='form_foto')
     presensie_l = st.file_uploader(
         "📑 Laai Presensielys op", 
-        type=["csv", "xlsx", "pdf", "jpg", "jpeg", "png"]
+        type=["csv", "xlsx", "pdf", "jpg", "jpeg", "png"],
+        key='form_presensie'
     )
 
     submitted = st.form_submit_button("➕ Stoor Data")
@@ -165,8 +216,8 @@ with st.form("data_form", clear_on_submit=True):
                     "Graad": graad,
                     "Vak": vak,
                     "Tema": tema,
-                    "Totaal Genooi": totaal_genooi,
-                    "Totaal Opgedaag": totaal_opgedaag,
+                    "Totaal Genooi": int(totaal_genooi),
+                    "Totaal Opgedaag": int(totaal_opgedaag),
                     "Opvoeder": opvoeder,
                     "Foto": foto_path,
                     "Presensielys": pres_path
@@ -203,17 +254,15 @@ with st.form("data_form", clear_on_submit=True):
 st.subheader("📊 Verslag")
 
 @st.cache_data(ttl=600)
-def load_and_filter_data(filter_type):
+def load_and_filter_data(filter_type, opvoeder=None, vak=None, graad=None):
     if not os.path.exists(CSV_FILE):
         return pd.DataFrame()
-    
     df = pd.read_csv(CSV_FILE)
     if df.empty:
         return df
-    
     df["Datum"] = pd.to_datetime(df["Datum"], errors="coerce")
     df["Aanwesigheid %"] = (df["Totaal Opgedaag"] / df["Totaal Genooi"] * 100).round(2)
-    
+
     today = datetime.today()
     if filter_type == "Weekliks":
         start = today - timedelta(days=7)
@@ -224,15 +273,27 @@ def load_and_filter_data(filter_type):
     elif filter_type == "Kwartaalliks":
         start = today - timedelta(days=90)
         df = df[df["Datum"] >= start]
+
+    # Apply additional filters
+    if opvoeder and opvoeder != 'Alles':
+        df = df[df['Opvoeder'] == opvoeder]
+    if vak and vak != 'Alles':
+        df = df[df['Vak'] == vak]
+    if graad and graad != 'Alles':
+        df = df[df['Graad'] == graad]
+
     return df.sort_values("Datum", ascending=False)
 
-# Initialize filter_type and load data
-filter_type = st.selectbox("🔎 Kies filter", ["Alles", "Weekliks", "Maandeliks", "Kwartaalliks"])
-df = load_and_filter_data(filter_type)
+# Load filtered data
+df = load_and_filter_data(filter_type, selected_opvoeder, selected_vak, selected_graad)
 
-# Pagination
-if 'page' not in st.session_state:
+# reset page if filters changed
+if 'last_filters' not in st.session_state:
+    st.session_state.last_filters = (filter_type, selected_opvoeder, selected_vak, selected_graad)
+
+if st.session_state.last_filters != (filter_type, selected_opvoeder, selected_vak, selected_graad):
     st.session_state.page = 0
+    st.session_state.last_filters = (filter_type, selected_opvoeder, selected_vak, selected_graad)
 
 ENTRIES_PER_PAGE = 10
 total_entries = len(df)
@@ -244,11 +305,11 @@ end_idx = min(start_idx + ENTRIES_PER_PAGE, total_entries)
 
 # Display filtered data
 if df.empty:
-    st.info("ℹ️ Nog geen data beskikbaar nie.")
+    st.info("ℹ️ Geen data vir die gekose filters nie.")
 else:
-    log_action("Report Generated", f"Filter: {filter_type}, Records: {len(df)}", "INFO")
+    log_action("Report Generated", f"Filter: {filter_type}, Opvoeder: {selected_opvoeder}, Vak: {selected_vak}, Graad: {selected_graad}, Records: {len(df)}", "INFO")
     st.dataframe(
-        df.iloc[start_idx:end_idx],
+        df.iloc[start_idx:end_idx].reset_index(drop=True),
         column_config={
             "Datum": st.column_config.DateColumn(format="YYYY-MM-DD"),
             "Aanwesigheid %": st.column_config.NumberColumn(format="%.2f%%"),
@@ -268,16 +329,18 @@ else:
             if st.button("Volgende"):
                 st.session_state.page += 1
     with col2:
-        st.write(f"Bladsy {st.session_state.page + 1} van {total_pages}")
+        st.write(f"Bladsy {st.session_state.page + 1} van {max(total_pages,1)}")
 
     # Generate Word report
-    def generate_word_report(df):
+    def generate_word_report(df_to_export):
         doc = Document()
         doc.add_heading("Saul Damon High School - Intervensie Verslag", level=1)
-        doc.add_paragraph(f"Filter: {filter_type}")
+        doc.add_paragraph(f"Filter: {filter_type} | Opvoeder: {selected_opvoeder} | Vak: {selected_vak} | Graad: {selected_graad}")
         doc.add_paragraph(f"Gegenereer op: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-        
-        for _, row in df.iterrows():
+        doc.add_paragraph("")
+
+        for _, row in df_to_export.iterrows():
+            # Basic details
             doc.add_paragraph(f"📅 Datum: {row['Datum'].strftime('%Y-%m-%d')}")
             doc.add_paragraph(f"🎓 Graad: {row['Graad']}")
             doc.add_paragraph(f"📚 Vak: {row['Vak']}")
@@ -286,34 +349,56 @@ else:
             doc.add_paragraph(f"✅ Totaal Opgedaag: {row['Totaal Opgedaag']}")
             doc.add_paragraph(f"👨‍🏫 Opvoeder: {row['Opvoeder']}")
             doc.add_paragraph(f"📈 Aanwesigheid: {row['Aanwesigheid %']:.2f}%")
-            
-            if pd.notna(row["Foto"]) and os.path.exists(row["Foto"]):
+
+            # Foto insertion
+            if pd.notna(row.get('Foto')) and os.path.exists(row['Foto']):
                 try:
-                    doc.add_picture(row["Foto"], width=Inches(2))
+                    doc.add_paragraph('Foto:')
+                    doc.add_picture(row['Foto'], width=Inches(3))
                 except Exception as e:
                     doc.add_paragraph(f"⚠️ Kon nie foto laai nie: {str(e)}")
-            
-            doc.add_paragraph("📑 Presensielys:")
-            if pd.notna(row["Presensielys"]) and os.path.exists(row["Presensielys"]):
-                ext = row["Presensielys"].split(".")[-1].lower()
-                if ext in ["jpg", "jpeg", "png"]:
+            else:
+                doc.add_paragraph("Geen geldige foto gevind nie.")
+
+            # Presensielys handling: if image -> add picture, if csv/xlsx -> add small table, else add filename
+            doc.add_paragraph('Presensielys:')
+            if pd.notna(row.get('Presensielys')) and os.path.exists(row['Presensielys']):
+                pres_path = row['Presensielys']
+                ext = pres_path.split('.')[-1].lower()
+                if ext in ['jpg', 'jpeg', 'png']:
                     try:
-                        doc.add_picture(row["Presensielys"], width=Inches(2))
+                        doc.add_picture(pres_path, width=Inches(3))
                     except Exception as e:
                         doc.add_paragraph(f"⚠️ Kon nie presensielys beeld laai nie: {str(e)}")
+                elif ext in ['csv', 'xls', 'xlsx']:
+                    df_p = read_presensie_to_table(pres_path, max_rows=50)
+                    if df_p is not None and not df_p.empty:
+                        # Add a Word table
+                        table = doc.add_table(rows=1, cols=min(len(df_p.columns), 10))
+                        hdr_cells = table.rows[0].cells
+                        for i, col_name in enumerate(df_p.columns[:10]):
+                            hdr_cells[i].text = str(col_name)
+                        for _, prow in df_p.iterrows():
+                            row_cells = table.add_row().cells
+                            for i, val in enumerate(prow[:10]):
+                                row_cells[i].text = str(val)
+                        if len(df_p) >= 50:
+                            doc.add_paragraph('... (tabel afgekort — slegs die eerste rye getoon)')
+                    else:
+                        doc.add_paragraph(f"Kon nie presensielys lees nie: {os.path.basename(pres_path)}")
                 else:
-                    doc.add_paragraph(f"  → {os.path.basename(row['Presensielys'])} (Nie-beeld lêer)")
+                    doc.add_paragraph(f"Lêer: {os.path.basename(pres_path)} (PDF of onbekende tipe - word in die map gehou)")
             else:
-                doc.add_paragraph("Geen presensielys opgelaai")
-            
+                doc.add_paragraph("Geen presensielys opgelaai nie")
+
             doc.add_paragraph("-" * 30)
-        
+
         buffer = BytesIO()
         doc.save(buffer)
         buffer.seek(0)
         return buffer.getvalue()
 
-    # Download button
+    # Download button for entire filtered dataset
     try:
         doc_bytes = generate_word_report(df)
         st.download_button(
@@ -326,3 +411,6 @@ else:
     except Exception as e:
         log_action("Word Report Download Failed", f"Error: {str(e)}", "ERROR")
         st.error(f"⚠️ Fout met verslag aflaai: {str(e)}")
+
+# Small note for users about large presensielyste
+st.caption("Let asseblief: Groter presensielyste (baie rye) word afgekort in die Word verslag om dokumentgrootte te beperk. Indien nodig, laai die oorspronklike lêer af vanaf die server se 'presensies' gids.")
