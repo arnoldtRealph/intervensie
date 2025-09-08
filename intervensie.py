@@ -285,7 +285,7 @@ def load_and_filter_data(filter_type, opvoeder=None, vak=None, graad=None):
 df = load_and_filter_data(filter_type, selected_opvoeder, selected_vak, selected_graad)
 
 # ---------------- Log Display ---------------- #
-st.subheader("📊 Verslag: Log Inskrywings")
+st.subheader("📊 Log Inskrywings")
 
 @st.cache_data(ttl=600)
 def load_log_data():
@@ -310,7 +310,7 @@ total_pages = (total_entries + ENTRIES_PER_PAGE - 1) // ENTRIES_PER_PAGE
 start_idx = st.session_state.log_page * ENTRIES_PER_PAGE
 end_idx = min(start_idx + ENTRIES_PER_PAGE, total_entries)
 
-# Display log data
+# Display log data on homepage
 if log_df.empty:
     st.info("ℹ️ Geen log inskrywings nie.")
 else:
