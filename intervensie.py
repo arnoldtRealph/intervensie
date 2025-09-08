@@ -35,7 +35,7 @@ if not os.path.exists(CSV_FILE):
 if not os.path.exists(LOG_FILE):
     pd.DataFrame(columns=["Timestamp", "Action", "Details", "Status"]).to_csv(LOG_FILE, index=False)
 
-
+# ---------------- Log Functions ---------------- #
 def log_action(action, details="", status="INFO"):
     """Log actions to CSV file."""
     log_entry = {
@@ -105,7 +105,6 @@ def upload_file_to_github(file_path, repo_name, path_in_repo, token):
         return False
 
 # ---------------- Helper: safe read attendance file ---------------- #
-
 def read_presensie_to_table(path, max_rows=50):
     """Try to convert a CSV/XLSX presensielys into a pandas DataFrame for insertion into Word."""
     try:
@@ -123,15 +122,19 @@ def read_presensie_to_table(path, max_rows=50):
         log_action("Presensie Read Failed", f"{path} - {str(e)}", "WARNING")
         return None
 
-# ---------------- UI ---------------- #
-st.title("HOËRSKOOL SAUL DAMON")
-st.subheader("📘 Intervensie Klasse")
+# ---------------- Load Intervention Data ---------------- #
+@st.cache_data(ttl=600)
+def load_intervention_data():
+    if not os.path.exists(CSV_FILE):
+        return pd.DataFrame()
+    df = pd.read_csv(CSV_FILE)
+    if df.empty:
+        return df
+    df["Datum"] = pd.to_datetime(df["Datum"], errors="coerce")
+    df["Aanwesigheid %"] = (df["Totaal Opgedaag"] / df["Totaal Genooi"] * 100).round(2)
+    return df.sort_values("Datum", ascending=False)
 
-# Sidebar filters for Word report
-st.sidebar.header("Filters vir Word Verslag")
-filter_type = st.sidebar.selectbox("🔎 Kies tydsfilter", ["Alles", "Weekliks", "Maandeliks", "Kwartaalliks", "Jaarliks"]) 
-
-# Load raw data for filter choices and deletion
+# ---------------- Load Raw Data for Filters and Deletion ---------------- #
 @st.cache_data(ttl=300)
 def load_raw():
     if not os.path.exists(CSV_FILE):
@@ -141,6 +144,14 @@ def load_raw():
         return df
     df['Datum'] = pd.to_datetime(df['Datum'], errors='coerce')
     return df.sort_values("Datum", ascending=False)
+
+# ---------------- UI ---------------- #
+st.title("HOËRSKOOL SAUL DAMON")
+st.subheader("📘 Intervensie Klasse")
+
+# Sidebar filters for Word report
+st.sidebar.header("Filters vir Word Verslag")
+filter_type = st.sidebar.selectbox("🔎 Kies tydsfilter", ["Alles", "Weekliks", "Maandeliks", "Kwartaalliks", "Jaarliks"]) 
 
 raw_df = load_raw()
 
@@ -256,17 +267,6 @@ with st.form("data_form", clear_on_submit=True):
 # ---------------- Log Display (Intervention Data) ---------------- #
 st.subheader("📊 Intervensie Log Inskrywings")
 
-@st.cache_data(ttl=600)
-def load_intervention_data():
-    if not os.path.exists(CSV_FILE):
-        return pd.DataFrame()
-    df = pd.read_csv(CSV_FILE)
-    if df.empty:
-        return df
-    df["Datum"] = pd.to_datetime(df["Datum"], errors="coerce")
-    df["Aanwesigheid %"] = (df["Totaal Opgedaag"] / df["Totaal Genooi"] * 100).round(2)
-    return df.sort_values("Datum", ascending=False)
-
 intervention_df = load_intervention_data()
 
 if 'intervention_page' not in st.session_state:
@@ -301,10 +301,12 @@ else:
         if st.session_state.intervention_page > 0:
             if st.button("Vorige"):
                 st.session_state.intervention_page -= 1
+                st.rerun()  # Rerun to update pagination
     with col3:
         if st.session_state.intervention_page < total_pages - 1:
             if st.button("Volgende"):
                 st.session_state.intervention_page += 1
+                st.rerun()  # Rerun to update pagination
     with col2:
         st.write(f"Bladsy {st.session_state.intervention_page + 1} van {max(total_pages,1)}")
 
