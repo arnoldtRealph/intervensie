@@ -107,35 +107,6 @@ def upload_file_to_github(file_path, repo_name, path_in_repo, token):
 st.title("HOËRSKOOL SAUL DAMON")
 st.subheader("📘 Intervensie Klasse")
 
-# Log Display on Homepage
-st.subheader("📋 Logs")
-if os.path.exists(LOG_FILE):
-    log_df = pd.read_csv(LOG_FILE)
-    if not log_df.empty:
-        recent_logs = log_df.tail(20).sort_values("Timestamp", ascending=False)
-        st.dataframe(
-            recent_logs,
-            column_config={
-                "Timestamp": st.column_config.DateColumn(format="YYYY-MM-DD HH:mm:ss"),
-                "Status": st.column_config.SelectboxColumn(options=["INFO", "SUCCESS", "ERROR", "WARNING"])
-            },
-            use_container_width=True,
-            height=400
-        )
-        # Log statistics
-        status_counts = log_df["Status"].value_counts()
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Totaal Logs", len(log_df))
-        with col2:
-            st.metric("Sukses", status_counts.get("SUCCESS", 0))
-        with col3:
-            st.metric("Foute", status_counts.get("ERROR", 0))
-    else:
-        st.info("ℹ️ Nog geen log items nie.")
-else:
-    st.info("ℹ️ Log lêer nie gevind nie.")
-
 # Form
 with st.form("data_form", clear_on_submit=True):
     col1, col2 = st.columns(2)
@@ -253,11 +224,23 @@ def load_and_filter_data(filter_type):
     elif filter_type == "Kwartaalliks":
         start = today - timedelta(days=90)
         df = df[df["Datum"] >= start]
-    return df
+    return df.sort_values("Datum", ascending=False)
 
 # Initialize filter_type and load data
 filter_type = st.selectbox("🔎 Kies filter", ["Alles", "Weekliks", "Maandeliks", "Kwartaalliks"])
 df = load_and_filter_data(filter_type)
+
+# Pagination
+if 'page' not in st.session_state:
+    st.session_state.page = 0
+
+ENTRIES_PER_PAGE = 10
+total_entries = len(df)
+total_pages = (total_entries + ENTRIES_PER_PAGE - 1) // ENTRIES_PER_PAGE
+
+# Calculate start and end indices for current page
+start_idx = st.session_state.page * ENTRIES_PER_PAGE
+end_idx = min(start_idx + ENTRIES_PER_PAGE, total_entries)
 
 # Display filtered data
 if df.empty:
@@ -265,7 +248,7 @@ if df.empty:
 else:
     log_action("Report Generated", f"Filter: {filter_type}, Records: {len(df)}", "INFO")
     st.dataframe(
-        df.sort_values("Datum", ascending=False),
+        df.iloc[start_idx:end_idx],
         column_config={
             "Datum": st.column_config.DateColumn(format="YYYY-MM-DD"),
             "Aanwesigheid %": st.column_config.NumberColumn(format="%.2f%%"),
@@ -273,6 +256,19 @@ else:
         },
         use_container_width=True
     )
+
+    # Pagination controls
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col1:
+        if st.session_state.page > 0:
+            if st.button("Vorige"):
+                st.session_state.page -= 1
+    with col3:
+        if st.session_state.page < total_pages - 1:
+            if st.button("Volgende"):
+                st.session_state.page += 1
+    with col2:
+        st.write(f"Bladsy {st.session_state.page + 1} van {total_pages}")
 
     # Generate Word report
     def generate_word_report(df):
@@ -306,7 +302,7 @@ else:
                     except Exception as e:
                         doc.add_paragraph(f"⚠️ Kon nie presensielys beeld laai nie: {str(e)}")
                 else:
-                    doc.add_paragraph(f"  → {os.path.basename(row['Presensielys'])}")
+                    doc.add_paragraph(f"  → {os.path.basename(row['Presensielys'])} (Nie-beeld lêer)")
             else:
                 doc.add_paragraph("Geen presensielys opgelaai")
             
