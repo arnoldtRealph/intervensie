@@ -197,6 +197,7 @@ with st.form("data_form", clear_on_submit=True):
             except Exception as e:
                 log_action("File Save Failed", f"Photo save error: {str(e)}", "ERROR")
                 st.error(f"⚠️ Fout met foto stoor: {str(e)}")
+                st.stop()
 
             try:
                 with open(pres_path, "wb") as f:
@@ -205,6 +206,7 @@ with st.form("data_form", clear_on_submit=True):
             except Exception as e:
                 log_action("File Save Failed", f"Attendance sheet save error: {str(e)}", "ERROR")
                 st.error(f"⚠️ Fout met presensielys stoor: {str(e)}")
+                st.stop()
 
             try:
                 new_entry = {
@@ -245,6 +247,11 @@ with st.form("data_form", clear_on_submit=True):
             except Exception as e:
                 log_action("GitHub Unexpected Error", f"Sync error: {str(e)}", "ERROR")
                 st.error(f"⚠️ Onverwagte GitHub fout: {str(e)}")
+
+            # Clear cache and rerun to update log display immediately
+            load_intervention_data.clear()
+            load_raw.clear()
+            st.rerun()
 
 # ---------------- Log Display (Intervention Data) ---------------- #
 st.subheader("📊 Intervensie Log Inskrywings")
@@ -372,6 +379,7 @@ if not raw_df.empty:
                 load_and_filter_data.clear()
                 load_raw.clear()
                 load_intervention_data.clear()
+                st.rerun()  # Rerun to update log display after deletion
             except Exception as e:
                 st.error(f"⚠️ Fout met verwydering: {str(e)}")
                 log_action("Deletion Failed", f"Error: {str(e)}", "ERROR")
