@@ -136,52 +136,188 @@ if os.path.exists(LOG_FILE):
 else:
     st.info("ℹ️ Log lêer nie gevind nie.")
 
-# [Rest of the code remains unchanged: Form, Reporting, and Word document generation]
-# For brevity, include only the Word document generation and download section to confirm the fix
-def generate_word_report(df):
-    doc = Document()
-    doc.add_heading("Saul Damon High School - Intervensie Verslag", level=1)
-    doc.add_paragraph(f"Filter: {filter_type}")
-    doc.add_paragraph(f"Gegenereer op: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+# Form
+with st.form("data_form", clear_on_submit=True):
+    col1, col2 = st.columns(2)
+    with col1:
+        datum = st.date_input("📅 Datum", value=datetime.today(), format="YYYY/MM/DD")
+        graad = st.selectbox("🎓 Graad", GRADE_OPTIONS)
+        vak = st.text_input("📚 Vak")
+        tema = st.text_input("🎯 Tema")
+    with col2:
+        totaal_genooi = st.number_input("👥 Totaal Genooi", min_value=1, step=1, format="%d")
+        totaal_opgedaag = st.number_input("✅ Totaal Opgedaag", min_value=0, step=1, format="%d")
+        opvoeder = st.text_input("👨‍🏫 Opvoeder")
     
-    for _, row in df.iterrows():
-        doc.add_paragraph(f"📅 Datum: {row['Datum'].strftime('%Y-%m-%d')}")
-        doc.add_paragraph(f"🎓 Graad: {row['Graad']}")
-        doc.add_paragraph(f"📚 Vak: {row['Vak']}")
-        doc.add_paragraph(f"🎯 Tema: {row['Tema']}")
-        doc.add_paragraph(f"👥 Totaal Genooi: {row['Totaal Genooi']}")
-        doc.add_paragraph(f"✅ Totaal Opgedaag: {row['Totaal Opgedaag']}")
-        doc.add_paragraph(f"👨‍🏫 Opvoeder: {row['Opvoeder']}")
-        doc.add_paragraph(f"📈 Aanwesigheid: {row['Aanwesigheid %']:.2f}%")
-        
-        if pd.notna(row["Foto"]) and os.path.exists(row["Foto"]):
-            try:
-                doc.add_picture(row["Foto"], width=Inches(2))
-            except Exception as e:
-                doc.add_paragraph(f"⚠️ Kon nie foto laai nie: {str(e)}")
-        
-        doc.add_paragraph("📑 Presensielys:")
-        if pd.notna(row["Presensielys"]) and os.path.exists(row["Presensielys"]):
-            ext = row["Presensielys"].split(".")[-1].lower()
-            if ext in ["jpg", "jpeg", "png"]:
-                try:
-                    doc.add_picture(row["Presensielys"], width=Inches(2))
-                except Exception as e:
-                    doc.add_paragraph(f"⚠️ Kon nie presensielys beeld laai nie: {str(e)}")
-            else:
-                doc.add_paragraph(f"  → {os.path.basename(row['Presensielys'])}")
-        else:
-            doc.add_paragraph("Geen presensielys opgelaai")
-        
-        doc.add_paragraph("-" * 30)
-    
-    buffer = BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer.getvalue()
+    foto = st.file_uploader("📸 Laai Foto op", type=["jpg", "jpeg", "png"])
+    presensie_l = st.file_uploader(
+        "📑 Laai Presensielys op", 
+        type=["csv", "xlsx", "pdf", "jpg", "jpeg", "png"]
+    )
 
-# Download button
-if not df.empty:
+    submitted = st.form_submit_button("➕ Stoor Data")
+
+    if submitted:
+        log_action("Form Submission", f"Submitted by: {opvoeder}", "INFO")
+        if not all([datum, graad, vak, tema, opvoeder, foto, presensie_l, totaal_genooi]):
+            log_action("Form Validation Failed", "Missing required fields", "WARNING")
+            st.error("⚠️ Alle velde is verpligtend!")
+        elif totaal_opgedaag > totaal_genooi:
+            log_action("Form Validation Failed", f"Attendance ({totaal_opgedaag}) > Total ({totaal_genooi})", "WARNING")
+            st.error("⚠️ Totaal Opgedaag kan nie meer as Totaal Genooi wees nie!")
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            foto_ext = os.path.splitext(foto.name)[1]
+            pres_ext = os.path.splitext(presensie_l.name)[1]
+            foto_path = os.path.join(FOTO_DIR, f"foto_{timestamp}{foto_ext}")
+            pres_path = os.path.join(PRES_DIR, f"presensie_{timestamp}{pres_ext}")
+
+            try:
+                with open(foto_path, "wb") as f:
+                    f.write(foto.getbuffer())
+                log_action("File Save Success", f"Photo saved: {foto_path}", "SUCCESS")
+            except Exception as e:
+                log_action("File Save Failed", f"Photo save error: {str(e)}", "ERROR")
+                st.error(f"⚠️ Fout met foto stoor: {str(e)}")
+
+            try:
+                with open(pres_path, "wb") as f:
+                    f.write(presensie_l.getbuffer())
+                log_action("File Save Success", f"Attendance sheet saved: {pres_path}", "SUCCESS")
+            except Exception as e:
+                log_action("File Save Failed", f"Attendance sheet save error: {str(e)}", "ERROR")
+                st.error(f"⚠️ Fout met presensielys stoor: {str(e)}")
+
+            try:
+                new_entry = {
+                    "Datum": datum.strftime("%Y-%m-%d"),
+                    "Graad": graad,
+                    "Vak": vak,
+                    "Tema": tema,
+                    "Totaal Genooi": totaal_genooi,
+                    "Totaal Opgedaag": totaal_opgedaag,
+                    "Opvoeder": opvoeder,
+                    "Foto": foto_path,
+                    "Presensielys": pres_path
+                }
+                df = pd.read_csv(CSV_FILE)
+                df = pd.concat([df, pd.DataFrame([new_entry])], ignore_index=True)
+                df.to_csv(CSV_FILE, index=False)
+                log_action("Database Update Success", f"Added entry for {datum.strftime('%Y-%m-%d')} - {vak}", "SUCCESS")
+            except Exception as e:
+                log_action("Database Update Failed", f"CSV error: {str(e)}", "ERROR")
+                st.error(f"⚠️ Fout met databasis stoor: {str(e)}")
+                st.stop()
+
+            try:
+                token = st.secrets.get("GITHUB_TOKEN")
+                repo = st.secrets.get("GITHUB_REPO")
+                if not token or not repo:
+                    log_action("GitHub Config Missing", f"Token: {bool(token)}, Repo: {bool(repo)}", "WARNING")
+                    st.warning("⚠️ GitHub konfigurasie ontbreek in secrets.")
+                elif upload_file_to_github(CSV_FILE, repo, "intervensie_database.csv", token):
+                    log_action("Sync Complete", "All operations successful", "SUCCESS")
+                    st.success("✅ Data gestoor en gesinkroniseer met GitHub!")
+                else:
+                    log_action("Sync Incomplete", "GitHub sync failed but data saved locally", "WARNING")
+                    st.warning("⚠️ Data lokaal gestoor, maar GitHub sinkronisasie misluk.")
+            except KeyError as e:
+                log_action("GitHub Secrets Error", f"Missing secret: {str(e)}", "ERROR")
+                st.error("⚠️ GitHub konfigurasie ontbreek in secrets!")
+            except Exception as e:
+                log_action("GitHub Unexpected Error", f"Sync error: {str(e)}", "ERROR")
+                st.error(f"⚠️ Onverwagte GitHub fout: {str(e)}")
+
+# ---------------- Reporting ---------------- #
+st.subheader("📊 Verslag")
+
+@st.cache_data(ttl=600)
+def load_and_filter_data(filter_type):
+    if not os.path.exists(CSV_FILE):
+        return pd.DataFrame()
+    
+    df = pd.read_csv(CSV_FILE)
+    if df.empty:
+        return df
+    
+    df["Datum"] = pd.to_datetime(df["Datum"], errors="coerce")
+    df["Aanwesigheid %"] = (df["Totaal Opgedaag"] / df["Totaal Genooi"] * 100).round(2)
+    
+    today = datetime.today()
+    if filter_type == "Weekliks":
+        start = today - timedelta(days=7)
+        df = df[df["Datum"] >= start]
+    elif filter_type == "Maandeliks":
+        start = today - timedelta(days=30)
+        df = df[df["Datum"] >= start]
+    elif filter_type == "Kwartaalliks":
+        start = today - timedelta(days=90)
+        df = df[df["Datum"] >= start]
+    return df
+
+# Initialize filter_type and load data
+filter_type = st.selectbox("🔎 Kies filter", ["Alles", "Weekliks", "Maandeliks", "Kwartaalliks"])
+df = load_and_filter_data(filter_type)
+
+# Display filtered data
+if df.empty:
+    st.info("ℹ️ Nog geen data beskikbaar nie.")
+else:
+    log_action("Report Generated", f"Filter: {filter_type}, Records: {len(df)}", "INFO")
+    st.dataframe(
+        df.sort_values("Datum", ascending=False),
+        column_config={
+            "Datum": st.column_config.DateColumn(format="YYYY-MM-DD"),
+            "Aanwesigheid %": st.column_config.NumberColumn(format="%.2f%%"),
+            "Graad": st.column_config.SelectboxColumn(options=GRADE_OPTIONS)
+        },
+        use_container_width=True
+    )
+
+    # Generate Word report
+    def generate_word_report(df):
+        doc = Document()
+        doc.add_heading("Saul Damon High School - Intervensie Verslag", level=1)
+        doc.add_paragraph(f"Filter: {filter_type}")
+        doc.add_paragraph(f"Gegenereer op: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        
+        for _, row in df.iterrows():
+            doc.add_paragraph(f"📅 Datum: {row['Datum'].strftime('%Y-%m-%d')}")
+            doc.add_paragraph(f"🎓 Graad: {row['Graad']}")
+            doc.add_paragraph(f"📚 Vak: {row['Vak']}")
+            doc.add_paragraph(f"🎯 Tema: {row['Tema']}")
+            doc.add_paragraph(f"👥 Totaal Genooi: {row['Totaal Genooi']}")
+            doc.add_paragraph(f"✅ Totaal Opgedaag: {row['Totaal Opgedaag']}")
+            doc.add_paragraph(f"👨‍🏫 Opvoeder: {row['Opvoeder']}")
+            doc.add_paragraph(f"📈 Aanwesigheid: {row['Aanwesigheid %']:.2f}%")
+            
+            if pd.notna(row["Foto"]) and os.path.exists(row["Foto"]):
+                try:
+                    doc.add_picture(row["Foto"], width=Inches(2))
+                except Exception as e:
+                    doc.add_paragraph(f"⚠️ Kon nie foto laai nie: {str(e)}")
+            
+            doc.add_paragraph("📑 Presensielys:")
+            if pd.notna(row["Presensielys"]) and os.path.exists(row["Presensielys"]):
+                ext = row["Presensielys"].split(".")[-1].lower()
+                if ext in ["jpg", "jpeg", "png"]:
+                    try:
+                        doc.add_picture(row["Presensielys"], width=Inches(2))
+                    except Exception as e:
+                        doc.add_paragraph(f"⚠️ Kon nie presensielys beeld laai nie: {str(e)}")
+                else:
+                    doc.add_paragraph(f"  → {os.path.basename(row['Presensielys'])}")
+            else:
+                doc.add_paragraph("Geen presensielys opgelaai")
+            
+            doc.add_paragraph("-" * 30)
+        
+        buffer = BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        return buffer.getvalue()
+
+    # Download button
     try:
         doc_bytes = generate_word_report(df)
         st.download_button(
