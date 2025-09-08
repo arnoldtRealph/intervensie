@@ -453,5 +453,51 @@ else:
         log_action("Word Report Download Failed", f"Error: {str(e)}", "ERROR")
         st.error(f"⚠️ Fout met verslag aflaai: {str(e)}")
 
+# ---------------- Log Download as Word ---------------- #
+st.subheader("📜 Log Verslag")
+
+def generate_log_word_report():
+    doc = Document()
+    doc.add_heading("Saul Damon High School - App Log Verslag", level=1)
+    doc.add_paragraph(f"Gegenereer op: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    doc.add_paragraph("")
+
+    if os.path.exists(LOG_FILE):
+        df_log = pd.read_csv(LOG_FILE)
+        if not df_log.empty:
+            # Add a table for the log entries
+            table = doc.add_table(rows=1, cols=len(df_log.columns))
+            hdr_cells = table.rows[0].cells
+            for i, col_name in enumerate(df_log.columns):
+                hdr_cells[i].text = col_name
+
+            for _, row in df_log.iterrows():
+                row_cells = table.add_row().cells
+                for i, val in enumerate(row):
+                    row_cells[i].text = str(val)
+        else:
+            doc.add_paragraph("Geen log inskrywings beskikbaar nie.")
+    else:
+        doc.add_paragraph("Geen log lêer gevind nie.")
+
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+# Download button for log as Word
+try:
+    log_doc_bytes = generate_log_word_report()
+    st.download_button(
+        label="⬇️ Laai Log af (Word)",
+        data=log_doc_bytes,
+        file_name=f"app_log_report_{datetime.now().strftime('%Y%m%d')}.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        key="download_log_word"
+    )
+except Exception as e:
+    log_action("Log Word Download Failed", f"Error: {str(e)}", "ERROR")
+    st.error(f"⚠️ Fout met log aflaai: {str(e)}")
+
 # Small note for users about large presensielyste
 st.caption("Let asseblief: Groter presensielyste (baie rye) word afgekort in die Word verslag om dokumentgrootte te beperk. Indien nodig, laai die oorspronklike lêer af vanaf die server se 'presensies' gids.")
