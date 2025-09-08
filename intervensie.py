@@ -127,58 +127,6 @@ def read_presensie_to_table(path, max_rows=50):
 st.title("HOËRSKOOL SAUL DAMON")
 st.subheader("📘 Intervensie Klasse")
 
-# ---------------- Log Display on Homepage ---------------- #
-st.header("📊 Log Inskrywings")
-
-@st.cache_data(ttl=600)
-def load_log_data():
-    if not os.path.exists(LOG_FILE):
-        return pd.DataFrame()
-    df_log = pd.read_csv(LOG_FILE)
-    if df_log.empty:
-        return df_log
-    df_log["Timestamp"] = pd.to_datetime(df_log["Timestamp"], errors="coerce")
-    return df_log.sort_values("Timestamp", ascending=False)
-
-log_df = load_log_data()
-
-if 'log_page' not in st.session_state:
-    st.session_state.log_page = 0
-
-ENTRIES_PER_PAGE = 10
-total_entries = len(log_df)
-total_pages = (total_entries + ENTRIES_PER_PAGE - 1) // ENTRIES_PER_PAGE
-
-# Calculate start and end indices for current page
-start_idx = st.session_state.log_page * ENTRIES_PER_PAGE
-end_idx = min(start_idx + ENTRIES_PER_PAGE, total_entries)
-
-# Display log data on homepage
-if log_df.empty:
-    st.info("ℹ️ Geen log inskrywings nie.")
-else:
-    log_action("Log Report Generated", f"Records: {len(log_df)}", "INFO")
-    st.dataframe(
-        log_df.iloc[start_idx:end_idx].reset_index(drop=True),
-        column_config={
-            "Timestamp": st.column_config.DatetimeColumn(format="YYYY-MM-DD HH:mm:ss"),
-        },
-        use_container_width=True
-    )
-
-    # Pagination controls
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col1:
-        if st.session_state.log_page > 0:
-            if st.button("Vorige"):
-                st.session_state.log_page -= 1
-    with col3:
-        if st.session_state.log_page < total_pages - 1:
-            if st.button("Volgende"):
-                st.session_state.log_page += 1
-    with col2:
-        st.write(f"Bladsy {st.session_state.log_page + 1} van {max(total_pages,1)}")
-
 # Sidebar filters for Word report
 st.sidebar.header("Filters vir Word Verslag")
 filter_type = st.sidebar.selectbox("🔎 Kies tydsfilter", ["Alles", "Weekliks", "Maandeliks", "Kwartaalliks", "Jaarliks"]) 
@@ -298,6 +246,61 @@ with st.form("data_form", clear_on_submit=True):
                 log_action("GitHub Unexpected Error", f"Sync error: {str(e)}", "ERROR")
                 st.error(f"⚠️ Onverwagte GitHub fout: {str(e)}")
 
+# ---------------- Log Display (Intervention Data) ---------------- #
+st.subheader("📊 Intervensie Log Inskrywings")
+
+@st.cache_data(ttl=600)
+def load_intervention_data():
+    if not os.path.exists(CSV_FILE):
+        return pd.DataFrame()
+    df = pd.read_csv(CSV_FILE)
+    if df.empty:
+        return df
+    df["Datum"] = pd.to_datetime(df["Datum"], errors="coerce")
+    df["Aanwesigheid %"] = (df["Totaal Opgedaag"] / df["Totaal Genooi"] * 100).round(2)
+    return df.sort_values("Datum", ascending=False)
+
+intervention_df = load_intervention_data()
+
+if 'intervention_page' not in st.session_state:
+    st.session_state.intervention_page = 0
+
+ENTRIES_PER_PAGE = 10
+total_entries = len(intervention_df)
+total_pages = (total_entries + ENTRIES_PER_PAGE - 1) // ENTRIES_PER_PAGE
+
+# Calculate start and end indices for current page
+start_idx = st.session_state.intervention_page * ENTRIES_PER_PAGE
+end_idx = min(start_idx + ENTRIES_PER_PAGE, total_entries)
+
+# Display intervention data on homepage
+if intervention_df.empty:
+    st.info("ℹ️ Geen intervensie inskrywings nie.")
+else:
+    log_action("Intervention Log Report Generated", f"Records: {len(intervention_df)}", "INFO")
+    st.dataframe(
+        intervention_df.iloc[start_idx:end_idx][["Datum", "Graad", "Vak", "Tema", "Totaal Genooi", "Totaal Opgedaag", "Opvoeder", "Aanwesigheid %"]].reset_index(drop=True),
+        column_config={
+            "Datum": st.column_config.DateColumn(format="YYYY-MM-DD"),
+            "Aanwesigheid %": st.column_config.NumberColumn(format="%.2f%%"),
+            "Graad": st.column_config.SelectboxColumn(options=GRADE_OPTIONS)
+        },
+        use_container_width=True
+    )
+
+    # Pagination controls
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col1:
+        if st.session_state.intervention_page > 0:
+            if st.button("Vorige"):
+                st.session_state.intervention_page -= 1
+    with col3:
+        if st.session_state.intervention_page < total_pages - 1:
+            if st.button("Volgende"):
+                st.session_state.intervention_page += 1
+    with col2:
+        st.write(f"Bladsy {st.session_state.intervention_page + 1} van {max(total_pages,1)}")
+
 # ---------------- Load and Filter Intervention Data for Report and Deletion ---------------- #
 @st.cache_data(ttl=600)
 def load_and_filter_data(filter_type, opvoeder=None, vak=None, graad=None):
@@ -368,7 +371,7 @@ if not raw_df.empty:
                 log_action("Deletion Success", f"Deleted ID {idx}", "SUCCESS")
                 load_and_filter_data.clear()
                 load_raw.clear()
-                load_log_data.clear()
+                load_intervention_data.clear()
             except Exception as e:
                 st.error(f"⚠️ Fout met verwydering: {str(e)}")
                 log_action("Deletion Failed", f"Error: {str(e)}", "ERROR")
@@ -482,7 +485,7 @@ def generate_log_word_report():
     doc.add_paragraph(f"Gegenereer op: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     doc.add_paragraph("")
 
-    log_df_report = load_log_data()
+    log_df_report = pd.read_csv(LOG_FILE) if os.path.exists(LOG_FILE) else pd.DataFrame()
     if not log_df_report.empty:
         # Add a table for the log entries
         table = doc.add_table(rows=1, cols=len(log_df_report.columns))
