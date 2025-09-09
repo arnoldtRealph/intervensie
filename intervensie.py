@@ -21,13 +21,9 @@ ERROR_LOG_FILE = "error_log.txt"
 FOTO_DIR = "fotos"
 PRES_DIR = "presensies"
 GRADE_OPTIONS = ["8", "9", "10", "11", "12"]
-TIMESLOT_OPTIONS = [
-    "08:00 - 10:00",
-    "10:00 - 12:00",
-    "12:00 - 14:00",
-    "14:00 - 16:00",
-    "16:00 - 18:00"
-]
+
+# 🕒 Nuwe tyd-opsies: ure vanaf 00:00 – 24:00
+TIME_OPTIONS = [f"{str(i).zfill(2)}:00" for i in range(25)]
 
 # Initialize directories and CSV
 for directory in [FOTO_DIR, PRES_DIR]:
@@ -174,7 +170,12 @@ with st.form("data_form", clear_on_submit=True):
         graad = st.selectbox("🎓 Graad", GRADE_OPTIONS, key='form_graad')
         vak = st.text_input("📚 Vak", key='form_vak')
         tema = st.text_input("🎯 Tema", key='form_tema')
-        tydsgleuf = st.selectbox("⏰ Kies Tydsgleuf", TIMESLOT_OPTIONS, key="form_tydsgleuf")
+
+        # 🕒 Nuwe veld: begin- en eindtyd
+        begin_tyd = st.selectbox("⏰ Begin Tyd", TIME_OPTIONS, key="form_begin")
+        eind_tyd = st.selectbox("⏰ Eind Tyd", TIME_OPTIONS, key="form_eind")
+        tydsgleuf = f"{begin_tyd} - {eind_tyd}"
+
     with col2:
         totaal_genooi = st.number_input("👥 Totaal Genooi", min_value=1, step=1, format="%d", key='form_totaal_genooi')
         totaal_opgedaag = st.number_input("✅ Totaal Opgedaag", min_value=0, step=1, format="%d", key='form_totaal_opgedaag')
