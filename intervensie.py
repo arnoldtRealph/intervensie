@@ -1,11 +1,12 @@
 import streamlit as st
 import pandas as pd
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from docx import Document
 from docx.shared import Inches
 from github import Github
 from io import BytesIO
+import uuid
 
 # ---------------- Config ---------------- #
 st.set_page_config(
@@ -28,8 +29,8 @@ for directory in [FOTO_DIR, PRES_DIR]:
 
 if not os.path.exists(CSV_FILE):
     pd.DataFrame(columns=[
-        "Datum", "Graad", "Vak", "Tema", "Totaal Genooi", 
-        "Totaal Opgedaag", "Opvoeder", "Foto", "Presensielys"
+        "Datum", "Graad", "Vak", "Tema", "Begintyd", "Eindtyd", 
+        "Totaal Genooi", "Totaal Opgedaag", "Opvoeder", "Foto", "Presensielys"
     ]).to_csv(CSV_FILE, index=False)
 
 if not os.path.exists(LOG_FILE):
@@ -172,6 +173,8 @@ with st.form("data_form", clear_on_submit=True):
         graad = st.selectbox("🎓 Graad", GRADE_OPTIONS, key='form_graad')
         vak = st.text_input("📚 Vak", key='form_vak')
         tema = st.text_input("🎯 Tema", key='form_tema')
+        begintyd = st.time_input("🕒 Begintyd", value=time(8, 0), step=900)  # 15-minute intervals
+        eindtyd = st.time_input("🕔 Eindtyd", value=time(9, 0), step=900)    # 15-minute intervals
     with col2:
         totaal_genooi = st.number_input("👥 Totaal Genooi", min_value=1, step=1, format="%d", key='form_totaal_genooi')
         totaal_opgedaag = st.number_input("✅ Totaal Opgedaag", min_value=0, step=1, format="%d", key='form_totaal_opgedaag')
@@ -188,12 +191,15 @@ with st.form("data_form", clear_on_submit=True):
 
     if submitted:
         log_action("Form Submission", f"Submitted by: {opvoeder}", "INFO")
-        if not all([datum, graad, vak, tema, opvoeder, foto, presensie_l, totaal_genooi]):
+        if not all([datum, graad, vak, tema, begintyd, eindtyd, opvoeder, foto, presensie_l, totaal_genooi]):
             log_action("Form Validation Failed", "Missing required fields", "WARNING")
             st.error("⚠️ Alle velde is verpligtend!")
         elif totaal_opgedaag > totaal_genooi:
             log_action("Form Validation Failed", f"Attendance ({totaal_opgedaag}) > Total ({totaal_genooi})", "WARNING")
             st.error("⚠️ Totaal Opgedaag kan nie meer as Totaal Genooi wees nie!")
+        elif begintyd >= eindtyd:
+            log_action("Form Validation Failed", f"Start time ({begintyd}) >= End time ({eindtyd})", "WARNING")
+            st.error("⚠️ Eindtyd moet later as Begintyd wees!")
         else:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             foto_ext = os.path.splitext(foto.name)[1]
@@ -225,6 +231,8 @@ with st.form("data_form", clear_on_submit=True):
                     "Graad": graad,
                     "Vak": vak,
                     "Tema": tema,
+                    "Begintyd": begintyd.strftime("%H:%M"),
+                    "Eindtyd": eindtyd.strftime("%H:%M"),
                     "Totaal Genooi": int(totaal_genooi),
                     "Totaal Opgedaag": int(totaal_opgedaag),
                     "Opvoeder": opvoeder,
@@ -286,11 +294,13 @@ if intervention_df.empty:
 else:
     log_action("Intervention Log Report Generated", f"Records: {len(intervention_df)}", "INFO")
     st.dataframe(
-        intervention_df.iloc[start_idx:end_idx][["Datum", "Graad", "Vak", "Tema", "Totaal Genooi", "Totaal Opgedaag", "Opvoeder", "Aanwesigheid %"]].reset_index(drop=True),
+        intervention_df.iloc[start_idx:end_idx][["Datum", "Graad", "Vak", "Tema", "Begintyd", "Eindtyd", "Totaal Genooi", "Totaal Opgedaag", "Opvoeder", "Aanwesigheid %"]].reset_index(drop=True),
         column_config={
             "Datum": st.column_config.DateColumn(format="YYYY-MM-DD"),
             "Aanwesigheid %": st.column_config.NumberColumn(format="%.2f%%"),
-            "Graad": st.column_config.SelectboxColumn(options=GRADE_OPTIONS)
+            "Graad": st.column_config.SelectboxColumn(options=GRADE_OPTIONS),
+            "Begintyd": st.column_config.TextColumn(),
+            "Eindtyd": st.column_config.TextColumn()
         },
         use_container_width=True
     )
@@ -400,7 +410,7 @@ def generate_word_report(df_to_export):
 
     if not df_to_export.empty:
         # Summary table
-        columns = ["Datum", "Graad", "Vak", "Tema", "Totaal Genooi", "Totaal Opgedaag", "Opvoeder", "Aanwesigheid %"]
+        columns = ["Datum", "Graad", "Vak", "Tema", "Begintyd", "Eindtyd", "Totaal Genooi", "Totaal Opgedaag", "Opvoeder", "Aanwesigheid %"]
         table = doc.add_table(rows=1, cols=len(columns))
         hdr_cells = table.rows[0].cells
         for i, col in enumerate(columns):
@@ -412,16 +422,18 @@ def generate_word_report(df_to_export):
             row_cells[1].text = str(row['Graad'])
             row_cells[2].text = row['Vak']
             row_cells[3].text = row['Tema']
-            row_cells[4].text = str(row['Totaal Genooi'])
-            row_cells[5].text = str(row['Totaal Opgedaag'])
-            row_cells[6].text = row['Opvoeder']
-            row_cells[7].text = f"{row['Aanwesigheid %']:.2f}%"
+            row_cells[4].text = str(row.get('Begintyd', 'NVT'))
+            row_cells[5].text = str(row.get('Eindtyd', 'NVT'))
+            row_cells[6].text = str(row['Totaal Genooi'])
+            row_cells[7].text = str(row['Totaal Opgedaag'])
+            row_cells[8].text = row['Opvoeder']
+            row_cells[9].text = f"{row['Aanwesigheid %']:.2f}%"
 
         doc.add_paragraph("")
         doc.add_heading("Details met Fotos en Presensielyste", level=2)
 
         for _, row in df_to_export.iterrows():
-            doc.add_heading(f"Inskrywing: {row['Datum'].strftime('%Y-%m-%d')} - {row['Vak']}", level=3)
+            doc.add_heading(f"Inskrywing: {row['Datum'].strftime('%Y-%m-%d')} - {row['Vak']} - {row.get('Begintyd', 'NVT')} tot {row.get('Eindtyd', 'NVT')}", level=3)
 
             # Foto insertion
             if pd.notna(row.get('Foto')) and os.path.exists(row['Foto']):
