@@ -101,7 +101,7 @@ def upload_file_to_github(file_path, repo_name, path_in_repo, token):
         error_msg = str(e)
         log_action("GitHub Upload Failed", f"Error: {error_msg}", "ERROR")
         with open(ERROR_LOG_FILE, "a") as f:
-            f匆            f.write(f"GitHub push failed: {error_msg} at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"GitHub push failed: {error_msg} at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         st.error(f"⚠️ GitHub upload misluk: {error_msg}")
         return False
 
@@ -212,7 +212,6 @@ with st.form("data_form", clear_on_submit=True):
     submitted = st.form_submit_button(
         "➕ Stoor Intervensie",
         help="Stoor die intervensie data",
-        type="primary",
         use_container_width=True
     )
 
@@ -511,7 +510,7 @@ def generate_word_report(df_to_export):
     buffer.seek(0)
     return buffer.getvalue()
 
-# Capture the Word report in a try-except block
+# Download button for Word report
 try:
     doc_bytes = generate_word_report(df)
     st.download_button(
