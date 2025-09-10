@@ -165,6 +165,27 @@ selected_opvoeder = st.sidebar.selectbox("Opvoeder", opvoeder_options)
 selected_vak = st.sidebar.selectbox("Vak", vak_options)
 selected_graad = st.sidebar.selectbox("Graad", graad_options)
 
+# Custom CSS to style the form submit button
+st.markdown(
+    """
+    <style>
+    div.stButton > button[kind="formSubmit"] {
+        background-color: green;
+        color: white;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 0.25rem;
+        width: 100%;
+    }
+    div.stButton > button[kind="formSubmit"]:hover {
+        background-color: darkgreen;
+        color: white;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # Form for new entries
 with st.form("data_form", clear_on_submit=True):
     col1, col2 = st.columns(2)
@@ -187,14 +208,13 @@ with st.form("data_form", clear_on_submit=True):
         key='form_presensie'
     )
 
-    # Modified button with green color and new label
-    submitted = st.form_submit_button("➕ Stoor Intervensie", help="Stoor die intervensie data", 
-                                     type="primary", 
-                                     on_click=None, 
-                                     args=None, 
-                                     kwargs=None,
-                                     use_container_width=True,
-                                     style="background-color: green; color: white;")
+    # Submit button with updated label, without invalid style parameter
+    submitted = st.form_submit_button(
+        "➕ Stoor Intervensie",
+        help="Stoor die intervensie data",
+        type="primary",
+        use_container_width=True
+    )
 
     if submitted:
         log_action("Form Submission", f"Submitted by: {opvoeder}", "INFO")
