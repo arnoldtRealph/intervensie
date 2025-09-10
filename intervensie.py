@@ -187,7 +187,14 @@ with st.form("data_form", clear_on_submit=True):
         key='form_presensie'
     )
 
-    submitted = st.form_submit_button("➕ Stoor Data")
+    # Modified button with green color and new label
+    submitted = st.form_submit_button("➕ Stoor Intervensie", help="Stoor die intervensie data", 
+                                     type="primary", 
+                                     on_click=None, 
+                                     args=None, 
+                                     kwargs=None,
+                                     use_container_width=True,
+                                     style="background-color: green; color: white;")
 
     if submitted:
         log_action("Form Submission", f"Submitted by: {opvoeder}", "INFO")
