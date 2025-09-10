@@ -101,7 +101,7 @@ def upload_file_to_github(file_path, repo_name, path_in_repo, token):
         error_msg = str(e)
         log_action("GitHub Upload Failed", f"Error: {error_msg}", "ERROR")
         with open(ERROR_LOG_FILE, "a") as f:
-            f.write(f"GitHub push failed: {error_msg} at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f匆            f.write(f"GitHub push failed: {error_msg} at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         st.error(f"⚠️ GitHub upload misluk: {error_msg}")
         return False
 
@@ -170,16 +170,16 @@ st.markdown(
     """
     <style>
     div.stButton > button[kind="formSubmit"] {
-        background-color: green;
-        color: white;
-        border: none;
-        padding: 0.5rem 1rem;
-        border-radius: 0.25rem;
-        width: 100%;
+        background-color: #28a745 !important;
+        color: white !important;
+        border: none !important;
+        padding: 0.5rem 1rem !important;
+        border-radius: 0.25rem !important;
+        width: 100% !important;
     }
     div.stButton > button[kind="formSubmit"]:hover {
-        background-color: darkgreen;
-        color: white;
+        background-color: #218838 !important;
+        color: white !important;
     }
     </style>
     """,
@@ -208,7 +208,7 @@ with st.form("data_form", clear_on_submit=True):
         key='form_presensie'
     )
 
-    # Submit button with updated label, without invalid style parameter
+    # Submit button with updated label
     submitted = st.form_submit_button(
         "➕ Stoor Intervensie",
         help="Stoor die intervensie data",
@@ -511,7 +511,7 @@ def generate_word_report(df_to_export):
     buffer.seek(0)
     return buffer.getvalue()
 
-# Download button for Word report
+# Capture the Word report in a try-except block
 try:
     doc_bytes = generate_word_report(df)
     st.download_button(
