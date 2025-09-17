@@ -15,7 +15,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for modern and smart look
+# Custom CSS for modern and smart look with dark mode support
 st.markdown(
     """
     <style>
@@ -32,51 +32,164 @@ st.markdown(
         max-width: 1200px;
         margin: 0 auto;
     }
-    .stButton > button {
-        background-color: #007bff !important;
-        color: white !important;
-        border-radius: 8px !important;
-        padding: 10px 20px !important;
-        font-weight: 500 !important;
-        transition: background-color 0.3s ease !important;
+    
+    /* Dark mode styles */
+    @media (prefers-color-scheme: dark) {
+        body {
+            background-color: #121212;
+        }
+        .stApp {
+            background-color: #1e1e1e;
+            color: #e0e0e0;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        /* Ensure headings are visible in dark mode */
+        h1, h2, h3, h4, h5, h6,
+        .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
+        .stMarkdown h4, .stMarkdown h5, .stMarkdown h6 {
+            color: #ffffff !important;
+            font-weight: 600 !important;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+        }
+        .stSelectbox, .stTextInput, .stDateInput, .stTimeInput, .stNumberInput, .stFileUploader {
+            background-color: #2d2d2d !important;
+            color: #e0e0e0 !important;
+            border: 1px solid #404040 !important;
+        }
+        .stSelectbox > div > div > div {
+            color: #e0e0e0 !important;
+        }
+        .stButton > button {
+            background-color: #007bff !important;
+            color: white !important;
+            border-radius: 8px !important;
+            padding: 10px 20px !important;
+            font-weight: 500 !important;
+            transition: background-color 0.3s ease !important;
+        }
+        .stButton > button:hover {
+            background-color: #0056b3 !important;
+        }
+        div.stButton > button[kind="formSubmit"] {
+            background-color: #28a745 !important;
+            color: white !important;
+            border: none !important;
+            padding: 0.5rem 1rem !important;
+            border-radius: 8px !important;
+            width: 100% !important;
+            font-weight: 500 !important;
+        }
+        div.stButton > button[kind="formSubmit"]:hover {
+            background-color: #218838 !important;
+        }
+        .stSidebar {
+            background-color: #2a2a2a !important;
+            color: #e0e0e0 !important;
+            border-radius: 10px !important;
+            padding: 15px !important;
+        }
+        .stSidebar .stSelectbox, .stSidebar .stTextInput {
+            background-color: #3a3a3a !important;
+            color: #e0e0e0 !important;
+            border: 1px solid #505050 !important;
+        }
+        .stDataFrame {
+            background-color: #2d2d2d !important;
+            color: #e0e0e0 !important;
+            border-radius: 8px !important;
+            overflow: hidden !important;
+        }
+        .stDataFrame thead tr th {
+            background-color: #404040 !important;
+            color: #ffffff !important;
+        }
+        .stDataFrame tbody tr td {
+            background-color: #2d2d2d !important;
+            color: #e0e0e0 !important;
+            border-bottom: 1px solid #404040 !important;
+        }
+        .stDataFrame tbody tr:nth-child(even) td {
+            background-color: #333333 !important;
+        }
+        .stCaption {
+            color: #b0b0b0 !important;
+            font-style: italic !important;
+        }
+        .stInfo, .stWarning, .stError, .stSuccess {
+            border-radius: 8px !important;
+        }
+        /* Mobile specific adjustments */
+        @media (max-width: 768px) {
+            .stApp {
+                padding: 10px !important;
+                margin: 5px !important;
+                border-radius: 5px !important;
+            }
+            .stSidebar {
+                padding: 10px !important;
+                border-radius: 5px !important;
+            }
+            /* Ensure headings remain visible on mobile in dark mode */
+            h1, h2, h3, h4, h5, h6,
+            .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
+            .stMarkdown h4, .stMarkdown h5, .stMarkdown h6 {
+                color: #ffffff !important;
+            }
+        }
     }
-    .stButton > button:hover {
-        background-color: #0056b3 !important;
-    }
-    div.stButton > button[kind="formSubmit"] {
-        background-color: #28a745 !important;
-        color: white !important;
-        border: none !important;
-        padding: 0.5rem 1rem !important;
-        border-radius: 8px !important;
-        width: 100% !important;
-        font-weight: 500 !important;
-    }
-    div.stButton > button[kind="formSubmit"]:hover {
-        background-color: #218838 !important;
-    }
-    .stSelectbox, .stTextInput, .stDateInput, .stTimeInput, .stNumberInput, .stFileUploader {
-        background-color: #f8f9fa !important;
-        border-radius: 8px !important;
-        padding: 10px !important;
-        border: 1px solid #ced4da !important;
-    }
-    .stSidebar {
-        background-color: #e9ecef !important;
-        border-radius: 10px !important;
-        padding: 15px !important;
-    }
-    h1, h2, h3 {
-        color: #343a40 !important;
-        font-weight: 600 !important;
-    }
-    .stDataFrame {
-        border-radius: 8px !important;
-        overflow: hidden !important;
-    }
-    .stCaption {
-        color: #6c757d !important;
-        font-style: italic !important;
+    
+    /* Light mode styles (default) */
+    @media (prefers-color-scheme: light) {
+        h1, h2, h3, h4, h5, h6,
+        .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
+        .stMarkdown h4, .stMarkdown h5, .stMarkdown h6 {
+            color: #343a40 !important;
+            font-weight: 600 !important;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+        }
+        .stSelectbox, .stTextInput, .stDateInput, .stTimeInput, .stNumberInput, .stFileUploader {
+            background-color: #f8f9fa !important;
+            border-radius: 8px !important;
+            padding: 10px !important;
+            border: 1px solid #ced4da !important;
+            color: #343a40 !important;
+        }
+        .stButton > button {
+            background-color: #007bff !important;
+            color: white !important;
+            border-radius: 8px !important;
+            padding: 10px 20px !important;
+            font-weight: 500 !important;
+            transition: background-color 0.3s ease !important;
+        }
+        .stButton > button:hover {
+            background-color: #0056b3 !important;
+        }
+        .stSidebar {
+            background-color: #e9ecef !important;
+            border-radius: 10px !important;
+            padding: 15px !important;
+        }
+        .stDataFrame {
+            border-radius: 8px !important;
+            overflow: hidden !important;
+        }
+        .stCaption {
+            color: #6c757d !important;
+            font-style: italic !important;
+        }
+        /* Mobile specific adjustments */
+        @media (max-width: 768px) {
+            .stApp {
+                padding: 10px !important;
+                margin: 5px !important;
+                border-radius: 5px !important;
+            }
+            .stSidebar {
+                padding: 10px !important;
+                border-radius: 5px !important;
+            }
+        }
     }
     </style>
     """,
