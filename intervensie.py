@@ -15,6 +15,74 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Custom CSS for modern and smart look
+st.markdown(
+    """
+    <style>
+    /* General styling for a modern look */
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background-color: #f4f7fa;
+    }
+    .stApp {
+        background-color: #ffffff;
+        border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        padding: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+    .stButton > button {
+        background-color: #007bff !important;
+        color: white !important;
+        border-radius: 8px !important;
+        padding: 10px 20px !important;
+        font-weight: 500 !important;
+        transition: background-color 0.3s ease !important;
+    }
+    .stButton > button:hover {
+        background-color: #0056b3 !important;
+    }
+    div.stButton > button[kind="formSubmit"] {
+        background-color: #28a745 !important;
+        color: white !important;
+        border: none !important;
+        padding: 0.5rem 1rem !important;
+        border-radius: 8px !important;
+        width: 100% !important;
+        font-weight: 500 !important;
+    }
+    div.stButton > button[kind="formSubmit"]:hover {
+        background-color: #218838 !important;
+    }
+    .stSelectbox, .stTextInput, .stDateInput, .stTimeInput, .stNumberInput, .stFileUploader {
+        background-color: #f8f9fa !important;
+        border-radius: 8px !important;
+        padding: 10px !important;
+        border: 1px solid #ced4da !important;
+    }
+    .stSidebar {
+        background-color: #e9ecef !important;
+        border-radius: 10px !important;
+        padding: 15px !important;
+    }
+    h1, h2, h3 {
+        color: #343a40 !important;
+        font-weight: 600 !important;
+    }
+    .stDataFrame {
+        border-radius: 8px !important;
+        overflow: hidden !important;
+    }
+    .stCaption {
+        color: #6c757d !important;
+        font-style: italic !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # Constants
 CSV_FILE = "intervensie_database.csv"
 LOG_FILE = "app_log.csv"
@@ -30,7 +98,8 @@ for directory in [FOTO_DIR, PRES_DIR]:
 if not os.path.exists(CSV_FILE):
     pd.DataFrame(columns=[
         "Datum", "Graad", "Vak", "Tema", "Begintyd", "Eindtyd", 
-        "Totaal Genooi", "Totaal Opgedaag", "Opvoeder", "Foto", "Presensielys"
+        "Totaal Genooi", "Totaal Opgedaag", "Opvoeder", "Foto", 
+        "Presensielys_Foto", "Presensielys_Dokument"
     ]).to_csv(CSV_FILE, index=False)
 
 if not os.path.exists(LOG_FILE):
@@ -165,27 +234,6 @@ selected_opvoeder = st.sidebar.selectbox("Opvoeder", opvoeder_options)
 selected_vak = st.sidebar.selectbox("Vak", vak_options)
 selected_graad = st.sidebar.selectbox("Graad", graad_options)
 
-# Custom CSS to style the form submit button
-st.markdown(
-    """
-    <style>
-    div.stButton > button[kind="formSubmit"] {
-        background-color: #28a745 !important;
-        color: white !important;
-        border: none !important;
-        padding: 0.5rem 1rem !important;
-        border-radius: 0.25rem !important;
-        width: 100% !important;
-    }
-    div.stButton > button[kind="formSubmit"]:hover {
-        background-color: #218838 !important;
-        color: white !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
 # Form for new entries
 with st.form("data_form", clear_on_submit=True):
     col1, col2 = st.columns(2)
@@ -201,14 +249,20 @@ with st.form("data_form", clear_on_submit=True):
         totaal_opgedaag = st.number_input("✅ Totaal Opgedaag", min_value=0, step=1, format="%d", key='form_totaal_opgedaag')
         opvoeder = st.text_input("👨‍🏫 Opvoeder", key='form_opvoeder')
     
-    foto = st.file_uploader("📸 Laai Foto op", type=["jpg", "jpeg", "png"], key='form_foto')
-    presensie_l = st.file_uploader(
-        "📑 Laai Presensielys op", 
-        type=["csv", "xlsx", "pdf", "jpg", "jpeg", "png"],
-        key='form_presensie'
+    st.subheader("📸 Presensielys Upload")
+    presensie_foto = st.file_uploader(
+        "📷 Laai Presensielys Foto op (opsioneel)", 
+        type=["jpg", "jpeg", "png"],
+        key='form_presensie_foto'
     )
+    presensie_dokument = st.file_uploader(
+        "📑 Laai Presensielys Dokument op (opsioneel)", 
+        type=["csv", "xlsx", "pdf"],
+        key='form_presensie_dokument'
+    )
+    foto = st.file_uploader("📸 Laai Foto op", type=["jpg", "jpeg", "png"], key='form_foto')
 
-    # Submit button with updated label
+    # Submit button
     submitted = st.form_submit_button(
         "➕ Stoor Intervensie",
         help="Stoor die intervensie data",
@@ -217,39 +271,59 @@ with st.form("data_form", clear_on_submit=True):
 
     if submitted:
         log_action("Form Submission", f"Submitted by: {opvoeder}", "INFO")
-        if not all([datum, graad, vak, tema, begintyd, eindtyd, opvoeder, foto, presensie_l, totaal_genooi]):
+        if not all([datum, graad, vak, tema, begintyd, eindtyd, opvoeder, totaal_genooi]):
             log_action("Form Validation Failed", "Missing required fields", "WARNING")
-            st.error("⚠️ Alle velde is verpligtend!")
+            st.error("⚠️ Alle verpligte velde (behalwe presensielys) moet ingevul word!")
         elif totaal_opgedaag > totaal_genooi:
             log_action("Form Validation Failed", f"Attendance ({totaal_opgedaag}) > Total ({totaal_genooi})", "WARNING")
             st.error("⚠️ Totaal Opgedaag kan nie meer as Totaal Genooi wees nie!")
         elif begintyd >= eindtyd:
             log_action("Form Validation Failed", f"Start time ({begintyd}) >= End time ({eindtyd})", "WARNING")
             st.error("⚠️ Eindtyd moet later as Begintyd wees!")
+        elif not (presensie_foto or presensie_dokument):
+            log_action("Form Validation Failed", "No presensielys uploaded", "WARNING")
+            st.error("⚠️ Ten minste een presensielys (foto of dokument) moet opgelaai word!")
         else:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            foto_ext = os.path.splitext(foto.name)[1]
-            pres_ext = os.path.splitext(presensie_l.name)[1]
-            foto_path = os.path.join(FOTO_DIR, f"foto_{timestamp}{foto_ext}")
-            pres_path = os.path.join(PRES_DIR, f"presensie_{timestamp}{pres_ext}")
+            foto_path = ""
+            pres_foto_path = ""
+            pres_dokument_path = ""
 
-            try:
-                with open(foto_path, "wb") as f:
-                    f.write(foto.getbuffer())
-                log_action("File Save Success", f"Photo saved: {foto_path}", "SUCCESS")
-            except Exception as e:
-                log_action("File Save Failed", f"Photo save error: {str(e)}", "ERROR")
-                st.error(f"⚠️ Fout met foto stoor: {str(e)}")
-                st.stop()
+            if foto:
+                foto_ext = os.path.splitext(foto.name)[1]
+                foto_path = os.path.join(FOTO_DIR, f"foto_{timestamp}{foto_ext}")
+                try:
+                    with open(foto_path, "wb") as f:
+                        f.write(foto.getbuffer())
+                    log_action("File Save Success", f"Photo saved: {foto_path}", "SUCCESS")
+                except Exception as e:
+                    log_action("File Save Failed", f"Photo save error: {str(e)}", "ERROR")
+                    st.error(f"⚠️ Fout met foto stoor: {str(e)}")
+                    st.stop()
 
-            try:
-                with open(pres_path, "wb") as f:
-                    f.write(presensie_l.getbuffer())
-                log_action("File Save Success", f"Attendance sheet saved: {pres_path}", "SUCCESS")
-            except Exception as e:
-                log_action("File Save Failed", f"Attendance sheet save error: {str(e)}", "ERROR")
-                st.error(f"⚠️ Fout met presensielys stoor: {str(e)}")
-                st.stop()
+            if presensie_foto:
+                pres_foto_ext = os.path.splitext(presensie_foto.name)[1]
+                pres_foto_path = os.path.join(PRES_DIR, f"presensie_foto_{timestamp}{pres_foto_ext}")
+                try:
+                    with open(pres_foto_path, "wb") as f:
+                        f.write(presensie_foto.getbuffer())
+                    log_action("File Save Success", f"Presensie foto saved: {pres_foto_path}", "SUCCESS")
+                except Exception as e:
+                    log_action("File Save Failed", f"Presensie foto save error: {str(e)}", "ERROR")
+                    st.error(f"⚠️ Fout met presensielys foto stoor: {str(e)}")
+                    st.stop()
+
+            if presensie_dokument:
+                pres_dokument_ext = os.path.splitext(presensie_dokument.name)[1]
+                pres_dokument_path = os.path.join(PRES_DIR, f"presensie_dokument_{timestamp}{pres_dokument_ext}")
+                try:
+                    with open(pres_dokument_path, "wb") as f:
+                        f.write(presensie_dokument.getbuffer())
+                    log_action("File Save Success", f"Presensie dokument saved: {pres_dokument_path}", "SUCCESS")
+                except Exception as e:
+                    log_action("File Save Failed", f"Presensie dokument save error: {str(e)}", "ERROR")
+                    st.error(f"⚠️ Fout met presensielys dokument stoor: {str(e)}")
+                    st.stop()
 
             try:
                 new_entry = {
@@ -263,7 +337,8 @@ with st.form("data_form", clear_on_submit=True):
                     "Totaal Opgedaag": int(totaal_opgedaag),
                     "Opvoeder": opvoeder,
                     "Foto": foto_path,
-                    "Presensielys": pres_path
+                    "Presensielys_Foto": pres_foto_path,
+                    "Presensielys_Dokument": pres_dokument_path
                 }
                 df = pd.read_csv(CSV_FILE)
                 df = pd.concat([df, pd.DataFrame([new_entry])], ignore_index=True)
@@ -402,9 +477,12 @@ if not raw_df.empty:
                 if pd.notna(row_to_delete['Foto']) and os.path.exists(row_to_delete['Foto']):
                     os.remove(row_to_delete['Foto'])
                     log_action("File Delete Success", f"Photo deleted: {row_to_delete['Foto']}", "SUCCESS")
-                if pd.notna(row_to_delete['Presensielys']) and os.path.exists(row_to_delete['Presensielys']):
-                    os.remove(row_to_delete['Presensielys'])
-                    log_action("File Delete Success", f"Presensielys deleted: {row_to_delete['Presensielys']}", "SUCCESS")
+                if pd.notna(row_to_delete['Presensielys_Foto']) and os.path.exists(row_to_delete['Presensielys_Foto']):
+                    os.remove(row_to_delete['Presensielys_Foto'])
+                    log_action("File Delete Success", f"Presensielys foto deleted: {row_to_delete['Presensielys_Foto']}", "SUCCESS")
+                if pd.notna(row_to_delete['Presensielys_Dokument']) and os.path.exists(row_to_delete['Presensielys_Dokument']):
+                    os.remove(row_to_delete['Presensielys_Dokument'])
+                    log_action("File Delete Success", f"Presensielys dokument deleted: {row_to_delete['Presensielys_Dokument']}", "SUCCESS")
 
                 # Sync to GitHub
                 token = st.secrets.get("GITHUB_TOKEN")
@@ -471,17 +549,22 @@ def generate_word_report(df_to_export):
             else:
                 doc.add_paragraph("Geen geldige foto gevind nie.")
 
-            # Presensielys handling
-            doc.add_paragraph('Presensielys:')
-            if pd.notna(row.get('Presensielys')) and os.path.exists(row['Presensielys']):
-                pres_path = row['Presensielys']
+            # Presensielys Foto insertion
+            doc.add_paragraph('Presensielys Foto:')
+            if pd.notna(row.get('Presensielys_Foto')) and os.path.exists(row['Presensielys_Foto']):
+                try:
+                    doc.add_picture(row['Presensielys_Foto'], width=Inches(2))
+                except Exception as e:
+                    doc.add_paragraph(f"⚠️ Kon nie presensielys foto laai nie: {str(e)}")
+            else:
+                doc.add_paragraph("Geen presensielys foto opgelaai nie.")
+
+            # Presensielys Dokument handling
+            doc.add_paragraph('Presensielys Dokument:')
+            if pd.notna(row.get('Presensielys_Dokument')) and os.path.exists(row['Presensielys_Dokument']):
+                pres_path = row['Presensielys_Dokument']
                 ext = pres_path.split('.')[-1].lower()
-                if ext in ['jpg', 'jpeg', 'png']:
-                    try:
-                        doc.add_picture(pres_path, width=Inches(2))
-                    except Exception as e:
-                        doc.add_paragraph(f"⚠️ Kon nie presensielys beeld laai nie: {str(e)}")
-                elif ext in ['csv', 'xls', 'xlsx']:
+                if ext in ['csv', 'xls', 'xlsx']:
                     df_p = read_presensie_to_table(pres_path)
                     if df_p is not None and not df_p.empty:
                         sub_table = doc.add_table(rows=1, cols=min(len(df_p.columns), 10))
@@ -499,7 +582,7 @@ def generate_word_report(df_to_export):
                 else:
                     doc.add_paragraph(f"Lêer: {os.path.basename(pres_path)} (PDF of onbekende tipe - word in die map gehou)")
             else:
-                doc.add_paragraph("Geen presensielys opgelaai nie")
+                doc.add_paragraph("Geen presensielys dokument opgelaai nie.")
 
             doc.add_paragraph("-" * 30)
     else:
